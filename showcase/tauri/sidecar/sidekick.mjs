@@ -30,6 +30,7 @@ import {
 } from './store.mjs';
 import { foldInput, foldPrompt, memoryInput, memoryPrompt, oneShot, parseBrain, parseSkill, shouldLearn, skillInput, skillPrompt, soundsWrong, transcript } from './brain.mjs';
 import { lessonsFor, lessonsLine } from './graph.mjs';
+import { createLaya, trace as layaTrace } from './laya.mjs';
 import { briefNote } from './brief.mjs';
 import { CHECK_MS, DEFAULT_DISTRACTIONS, check as focusCheck, parseDistractions, startBlock } from './focus.mjs';
 import { saveCardImage } from './cardimage.mjs';
@@ -606,6 +607,7 @@ function routeForTurn(text) {
 }
 /** A tool of a heavy kind started: the next request shortly after stays on that kind's model. */
 function noteTool(name) {
+  turnTools.push(name); // Clanky: Laya's ground truth (laya.mjs)
   const kind = kindOfTool(name);
   if (!kind || !hybridActive()) return;
   const p = pickHeavy([kind], config.heavy, runnableSpec);
@@ -811,6 +813,9 @@ The <live-state> block at the top of the user's newest message is the current st
 let lastFactIds = [];
 let frontNow = ''; // set just before each request (whereNow)
 let lessonsNow = []; // Clanky: graph lessons for the front app, set just before each request (graph.mjs)
+// Clanky: Laya in shadow mode (laya.mjs). It decides beside jobKinds(); only the trace uses its answer for now.
+const laya = createLaya();
+let layaNow = null, layaApp = null, turnTools = [], recentTools = [];
 const crewLine = () => { const t = crewText(crewNow(), (sp) => modelName(sp.model), config.delegate); return t ? `${t}\n` : ''; };
 const livePrompt = (context = '') => {
   const facts = pickFacts(context, 40), total = listFacts().length;
@@ -1428,9 +1433,12 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
     const use = { t: Date.now(), model: config.model, calls: 0, tools: 0, in: 0, cacheRead: 0, cacheWrite: 0, out: 0 };
     const learn = { ok: 0, bad: 0, saved: false }; // for the skill pass: tools that worked, ones that failed
     const soon = frontSoon; frontSoon = null;
-    [frontNow, lessonsNow] = await Promise.all([
+    const front = frontData().catch(() => null);
+    turnTools = [];
+    [frontNow, lessonsNow, layaNow] = await Promise.all([
       frontWithin(soon && Date.now() - soon.at < 8000 ? soon.p : whereNow()),
-      frontData().then((f) => lessonsFor({ bundle: f?.bundle, text })).catch(() => []),
+      front.then((f) => lessonsFor({ bundle: f?.bundle, text })).catch(() => []),
+      turnWords ? front.then((f) => { layaApp = f?.bundle ?? null; return laya.ask({ text: turnWords, app: layaApp, recentTools }); }).catch(() => null) : null,
     ]);
     // The first spoken request of the day carries the morning briefing (brief.mjs).
     const brief = intro ? null : briefNote({ on: !!config.morningBrief, lastDay: config.briefDay, byVoice, todoist: !!config.briefTodoist, canRead: HANDS_OK, name: userName });
@@ -1538,6 +1546,10 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
     logUsage({ ...use, ms: Date.now() - use.t });
     learnAfter = !config.lite && shouldLearn({ on: config.learnSkills !== false, okTools: learn.ok, errors: learn.bad, aborted: stalled || controller.signal.aborted, system: !turnWords, saved: learn.saved });
     logLine('request_done', { turn, ms: Date.now() - use.t, calls: use.calls, tools: use.tools, in: use.in, cacheRead: use.cacheRead, cacheWrite: use.cacheWrite, out: use.out });
+    if (turnWords) {
+      layaTrace({ t: use.t, text: turnWords, app: layaApp, regex: jobKinds(turnWords), laya: layaNow, tools: turnTools, truth: [...new Set(turnTools.map(kindOfTool).filter(Boolean))], model: config.model, ms: Date.now() - use.t, in: use.in, cacheRead: use.cacheRead, cacheWrite: use.cacheWrite, out: use.out });
+      recentTools = [...recentTools, ...turnTools].slice(-8);
+    }
   } catch (err) {
     lastFailed = true;
     hatchOff();
