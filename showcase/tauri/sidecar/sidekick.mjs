@@ -30,7 +30,7 @@ import {
 } from './store.mjs';
 import { foldInput, foldPrompt, memoryInput, memoryPrompt, oneShot, parseBrain, parseSkill, shouldLearn, skillInput, skillPrompt, soundsWrong, transcript } from './brain.mjs';
 import { lessonsFor, lessonsLine } from './graph.mjs';
-import { createLaya, trace as layaTrace } from './laya.mjs';
+import { createLaya, pickKinds, trace as layaTrace } from './laya.mjs';
 import { briefNote } from './brief.mjs';
 import { CHECK_MS, DEFAULT_DISTRACTIONS, check as focusCheck, parseDistractions, startBlock } from './focus.mjs';
 import { saveCardImage } from './cardimage.mjs';
@@ -578,7 +578,7 @@ function routeForTurn(text) {
     if (named && named.spec !== dflt.spec) { want = pickOf(named.provider, named.model, null); why = 'named'; turnNamed = want; }
   }
   if (!want && !system && hybridActive()) {
-    const p = pickHeavy(jobKinds(t), config.heavy, runnableSpec);
+    const p = pickHeavy(pickKinds(jobKinds(t), layaNow), config.heavy, runnableSpec); // Clanky: Laya when it's sure
     if (p) { want = pickOf(p.provider, p.model, p.kind); why = 'job'; kindLabel = JOB_KINDS.find((j) => j.kind === p.kind)?.label ?? p.kind; }
     else if (stickyPick && Date.now() < stickyUntil && !isChitchat(t) && runnableSpec(stickyPick.provider, stickyPick.model)) {
       want = pickOf(stickyPick.provider, stickyPick.model, stickyPick.slot); why = stickyPick.why ?? 'job';
@@ -1376,6 +1376,12 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
   // Retrying after a usage limit: the unanswered message is dropped from the conversation, and the next model is told.
   const retrying = retryInfo?.text === text ? retryInfo : null, retryCount = retrying?.count ?? 0;
   if (retrying) { retryInfo = retrying; if (session?.messages?.at(-1)?.role === 'user') session.messages.pop(); agent = null; }
+  // Clanky: Laya decides before routing (laya.mjs). Capped so a slow front-app lookup never holds the request up.
+  turnTools = []; layaNow = null; layaApp = null;
+  if (turnWords) {
+    const asked = frontData().catch(() => null).then((f) => { layaApp = f?.bundle ?? null; return laya.ask({ text: turnWords, app: layaApp, recentTools }); });
+    layaNow = await Promise.race([asked, new Promise((r) => setTimeout(() => r(null), 150))]);
+  }
   const handoff = routeForTurn(turnWords || '(system)');
   if (retrying) retryInfo = null;
   const notReady = await readyAgent();
@@ -1433,12 +1439,9 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
     const use = { t: Date.now(), model: config.model, calls: 0, tools: 0, in: 0, cacheRead: 0, cacheWrite: 0, out: 0 };
     const learn = { ok: 0, bad: 0, saved: false }; // for the skill pass: tools that worked, ones that failed
     const soon = frontSoon; frontSoon = null;
-    const front = frontData().catch(() => null);
-    turnTools = [];
-    [frontNow, lessonsNow, layaNow] = await Promise.all([
+    [frontNow, lessonsNow] = await Promise.all([
       frontWithin(soon && Date.now() - soon.at < 8000 ? soon.p : whereNow()),
-      front.then((f) => lessonsFor({ bundle: f?.bundle, text })).catch(() => []),
-      turnWords ? front.then((f) => { layaApp = f?.bundle ?? null; return laya.ask({ text: turnWords, app: layaApp, recentTools }); }).catch(() => null) : null,
+      (layaApp ? Promise.resolve(layaApp) : frontData().then((f) => f?.bundle).catch(() => null)).then((bundle) => lessonsFor({ bundle, text })).catch(() => []),
     ]);
     // The first spoken request of the day carries the morning briefing (brief.mjs).
     const brief = intro ? null : briefNote({ on: !!config.morningBrief, lastDay: config.briefDay, byVoice, todoist: !!config.briefTodoist, canRead: HANDS_OK, name: userName });
@@ -1547,7 +1550,7 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
     learnAfter = !config.lite && shouldLearn({ on: config.learnSkills !== false, okTools: learn.ok, errors: learn.bad, aborted: stalled || controller.signal.aborted, system: !turnWords, saved: learn.saved });
     logLine('request_done', { turn, ms: Date.now() - use.t, calls: use.calls, tools: use.tools, in: use.in, cacheRead: use.cacheRead, cacheWrite: use.cacheWrite, out: use.out });
     if (turnWords) {
-      layaTrace({ t: use.t, text: turnWords, app: layaApp, regex: jobKinds(turnWords), laya: layaNow, tools: turnTools, truth: [...new Set(turnTools.map(kindOfTool).filter(Boolean))], model: config.model, ms: Date.now() - use.t, in: use.in, cacheRead: use.cacheRead, cacheWrite: use.cacheWrite, out: use.out });
+      layaTrace({ t: use.t, text: turnWords, app: layaApp, regex: jobKinds(turnWords), laya: layaNow, used: pickKinds(jobKinds(turnWords), layaNow), tools: turnTools, truth: [...new Set(turnTools.map(kindOfTool).filter(Boolean))], model: config.model, ms: Date.now() - use.t, in: use.in, cacheRead: use.cacheRead, cacheWrite: use.cacheWrite, out: use.out });
       recentTools = [...recentTools, ...turnTools].slice(-8);
     }
   } catch (err) {

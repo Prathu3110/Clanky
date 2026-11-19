@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
-import { createLaya, trace } from '../laya.mjs';
+import { createLaya, pickKinds, trace } from '../laya.mjs';
 
 // A fake Laya: answers each line with `answer(request)`, after `delay` ms (or never when it returns undefined).
 function fake(answer, delay = 0) {
@@ -56,6 +56,16 @@ function fake(answer, delay = 0) {
   const junk = createLaya({ bin: 'x', spawnImpl: () => fake(() => 'not a decision'), timeoutMs: 200 });
   assert.equal(await junk.ask({ text: 'a' }), null, 'junk line');
   junk.stop();
+}
+
+// Routing: Laya's kinds only when it's sure; unsure, missing or the stub's 0 confidence leaves the regex router in charge.
+{
+  assert.deepEqual(pickKinds(['code'], { kinds: ['computer'], confidence: 0.9 }), ['computer']);
+  assert.deepEqual(pickKinds(['code'], { kinds: ['computer'], confidence: 0.6 }), ['computer'], 'threshold is inclusive');
+  assert.deepEqual(pickKinds(['code'], { kinds: ['computer'], confidence: 0.59 }), ['code']);
+  assert.deepEqual(pickKinds(['code'], { kinds: [], confidence: 0 }), ['code'], 'the stub never routes');
+  assert.deepEqual(pickKinds(['code'], null), ['code'], 'no Laya');
+  assert.deepEqual(pickKinds(['code'], { kinds: [], confidence: 0.95 }), [], 'a sure "plain chat" wins too');
 }
 
 // The trace: one private JSON line per entry.

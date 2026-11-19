@@ -50,6 +50,10 @@ export function createLaya({ bin = binPath(), spawnImpl = spawn, timeoutMs = TIM
   };
 }
 
+export const LAYA_ON = 0.6; // Laya's kinds route the request only at or above this confidence
+/** The kinds that route this request: Laya's when it's sure, the regex router's otherwise. */
+export const pickKinds = (regexKinds, decision, threshold = LAYA_ON) => (decision && decision.confidence >= threshold ? decision.kinds : regexKinds);
+
 /** One line per request: what each router said, and what the turn really did. Kept local, private (0600). */
 export async function trace(entry, file = TRACE) {
   try { await fs.appendFile(file, `${JSON.stringify(entry)}\n`, { mode: 0o600 }); } catch {}
