@@ -1,0 +1,10 @@
+[package]
+name = "laya"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+description = "Clanky's gate: decides what kind of job a request is before any model sees it"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
