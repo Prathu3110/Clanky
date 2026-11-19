@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const file = process.argv[2] ?? path.join(os.homedir(), 'Roamies', 'Data', 'laya-trace.jsonl');
+const file = process.argv[2] ?? path.join(os.homedir(), 'Clanky', 'Data', 'laya-trace.jsonl');
 const rows = readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
 const same = (a = [], b = []) => a.length === b.length && a.every((k) => b.includes(k));
 // The kinds that pick a model are what matter: a request is "right" when its first kind matches the truth's first.

@@ -11,7 +11,7 @@ import { DIR } from './store.mjs';
 
 const TIMEOUT_MS = 50; // Laya must be faster than this to be worth asking
 export const TRACE = path.join(DIR, 'laya-trace.jsonl');
-const binPath = () => [process.env.CLANKY_LAYA_BIN, path.join(os.homedir(), 'Roamies', 'bin', 'laya')].find((p) => p && existsSync(p)) ?? null;
+const binPath = () => [process.env.CLANKY_LAYA_BIN, path.join(os.homedir(), 'Clanky', 'bin', 'laya')].find((p) => p && existsSync(p)) ?? null;
 
 /** A long-lived Laya process. ask() resolves to { kinds, confidence, ms } or null. `spawnImpl`/`bin` are for tests. */
 export function createLaya({ bin = binPath(), spawnImpl = spawn, timeoutMs = TIMEOUT_MS } = {}) {

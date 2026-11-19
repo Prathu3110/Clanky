@@ -19,7 +19,7 @@ It must answer within 50 ms, or the sidecar ignores it. If it's missing, crashes
 ## Shadow mode (now)
 
 Laya decides on every request next to the regex router (`route.mjs` `jobKinds()`), but only the regex answer is
-used. Both go to `~/Roamies/Data/laya-trace.jsonl` together with `truth`: the kinds of the tools the turn really
+used. Both go to `~/Clanky/Data/laya-trace.jsonl` together with `truth`: the kinds of the tools the turn really
 used. Every request you make grades both routers, with no labelling.
 
 ```sh
@@ -32,10 +32,10 @@ Switch Laya on when it wins there.
 
 ```sh
 cd laya && cargo build --release
-mkdir -p ~/Roamies/bin && ln -sf "$PWD/target/release/laya" ~/Roamies/bin/laya
+mkdir -p ~/Clanky/bin && ln -sf "$PWD/target/release/laya" ~/Clanky/bin/laya
 ```
 
-The sidecar looks for `$CLANKY_LAYA_BIN`, then `~/Roamies/bin/laya`.
+The sidecar looks for `$CLANKY_LAYA_BIN`, then `~/Clanky/bin/laya`.
 
 ## Roadmap
 
