@@ -109,6 +109,8 @@ console.log('brain tests: passed');
   assert.deepEqual(parseLesson('{"fact": {"text": "Ken uses Firefox, not Chrome", "replaces": "f1"}, "skill": null}', { knownIds: ['f1'] }), { fact: { text: 'Ken uses Firefox, not Chrome', replaces: 'f1' } });
   assert.deepEqual(parseLesson('```json\n{"fact": null, "skill": {"name": "Export Figma frames", "description": "When they want Figma frames as PNGs.", "steps": "1. Select the frames.\\n2. Export at 2x, not 1x."}}\n```').skill.name, 'Export Figma frames');
   assert.deepEqual(parseLesson('{"fact": null, "skill": null}'), {}, 'nothing to keep');
+  assert.deepEqual(parseLesson('{"fact": null, "skill": null, "lesson": {"text": "In WhatsApp, open the chat from search before typing"}}'), { lesson: { text: 'In WhatsApp, open the chat from search before typing' } }, 'an app lesson');
+  assert.deepEqual(parseLesson('{"lesson": {"text": "In Bank, the password is hunter2"}}'), {}, 'no secrets in lessons');
   assert.deepEqual(parseLesson('{"fact": {"text": "Ken\'s password is hunter2"}, "skill": {"name": "Pay", "description": "When paying the bill online.", "steps": "1. Enter card 4111 1111 1111 1111 and pay."}}'), {}, 'no secrets, no card numbers');
   assert.deepEqual(parseLesson('{"fact": "Ken likes tea", "skill": {"name": "x"}}'), { fact: { text: 'Ken likes tea' } }, 'a plain string fact; a scrap skill dropped');
   assert.throws(() => parseLesson('no'), /no JSON/);

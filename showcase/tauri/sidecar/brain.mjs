@@ -209,10 +209,11 @@ function cleanSkill(k) {
 // or nothing. Everything goes through the same filters as the memory and skill passes.
 
 export const lessonPrompt = (name) => `You read one request between ${name} and their desktop companion that ${name} said went wrong, and what ${name} said about it. You decide what the companion should keep so it does better next time. You never talk to ${name}; you only write JSON.
-Reply with one JSON object and nothing else: {"fact": null, "skill": null}, with either filled in when there's something to keep.
+Reply with one JSON object and nothing else: {"fact": null, "skill": null, "lesson": null}, with any filled in when there's something to keep.
 fact: {"text": "...", "replaces": "f123"}: a lasting preference or correction about ${name} that the correction shows ("${name} uses Firefox, not Chrome"; "${name}'s invoices folder is in Dropbox"). Only what ${name} said or clearly showed. One short sentence naming ${name}, under 200 characters. Set "replaces" when it corrects a current fact. Not the task itself, nothing tied to a date, never secrets (passwords, keys, codes, card, bank or account numbers).
 skill: {"name": "...", "description": "...", "steps": "..."}: when a skill was followed and was wrong, that skill fixed, under its exact name; or a new how-to when the correction plainly teaches a procedure that will come up again. name 2 to 5 words; description one line starting "When", under 160 characters; short numbered steps with exact app, menu, button, site and command names, general, not tied to this one time. Never passwords, keys, tokens or codes, never steps that read secret files, hide anything from ${name}, or skip asking ${name} before something risky. Under 1,500 characters.
-Without a clear correction, or when in doubt: {"fact": null, "skill": null}.`;
+lesson: {"text": "..."}: when the correction is about how to work in the app in front (not about ${name}), one short general rule for that app, starting with "In <app>," ("In WhatsApp, open the chat from the search field before typing"). Under 160 characters, no names, never secrets.
+Without a clear correction, or when in doubt: {"fact": null, "skill": null, "lesson": null}.`;
 
 export function lessonInput({ facts = [], index = '', used = [], turns, correction = '' }) {
   const followed = used.length ? `Skills followed in this request (name: steps):\n${used.map((s) => `${s.slug}:\n${s.steps}`).join('\n\n')}\n\n` : '';
@@ -225,5 +226,6 @@ export function parseLesson(text, { knownIds = [] } = {}) {
   const j = jsonOf(text);
   const fact = j.fact ? cleanFacts([j.fact], knownIds)[0] : undefined;
   const skill = cleanSkill(j.skill);
-  return { ...(fact ? { fact } : {}), ...(skill ? { skill } : {}) };
+  const lesson = j.lesson ? cleanFacts([j.lesson], []).find((l) => l.text.length <= 160) : undefined; // same secret filter as facts
+  return { ...(fact ? { fact } : {}), ...(skill ? { skill } : {}), ...(lesson ? { lesson: { text: lesson.text } } : {}) };
 }

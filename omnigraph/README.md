@@ -39,5 +39,9 @@ keeps its lock: read the ID with `omnigraph cluster status --target $D --json` a
 ## Known limits
 
 - `omnigraph-server` has no TLS, and the CLI sends tokens only over HTTPS, so CLI targets don't work yet.
-  Owner actions (merging `proposed`) go through the MCP or HTTP API with the `act-me` token for now.
+  Owner actions (merging `proposed`): `node omnigraph/review.mjs` lists the new lessons and merges them with `act-me`.
+
+Lessons come from corrections: when you tell Clanky a request was wrong and why, the lesson pass (brain.mjs) may
+write one rule for the app in front ("In WhatsApp, open the chat from search first"). It lands on `proposed`; Clanky
+reads only `main`, so nothing it wrote is used until you merge it.
 - The server runs only while you start it. A LaunchAgent can come later.

@@ -1,6 +1,6 @@
 // Clanky graph lessons (graph.mjs): what goes over the wire, how rows come back, and that every failure is soft.
 import assert from 'node:assert/strict';
-import { callTool, lessonsFor, lessonsLine, proposeLesson } from '../graph.mjs';
+import { callTool, lessonsFor, lessonSlug, lessonsLine, proposeLesson } from '../graph.mjs';
 
 const reply = (result) => async () => ({ json: async () => ({ jsonrpc: '2.0', id: 1, result }) });
 const ok = (structuredContent) => reply({ structuredContent, content: [{ type: 'text', text: JSON.stringify(structuredContent) }] });
@@ -44,3 +44,11 @@ const ok = (structuredContent) => reply({ structuredContent, content: [{ type: '
 }
 
 console.log('graph tests: passed');
+
+{
+  const a = lessonSlug('In WhatsApp, open the chat from search first');
+  assert.match(a, /^in-whatsapp-open-the-chat-from-search-fi-[0-9a-f]{6}$/);
+  assert.equal(a, lessonSlug('In WhatsApp, open the chat from search first'), 'stable');
+  assert.notEqual(a, lessonSlug('In WhatsApp, open the chat from search first!'), 'distinct texts, distinct keys');
+  console.log('lessonSlug: passed');
+}
