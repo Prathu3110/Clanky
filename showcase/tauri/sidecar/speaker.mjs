@@ -1,7 +1,7 @@
-// Speaks replies with Fish Audio, Gemini or VoiceStudio (the user's pick) and hands the audio to the overlay
+// Speaks replies with Fish Audio, Gemini or Kokoro (the user's pick) and hands the audio to the overlay
 // ({ kind: 'speech' } messages).
-// - VoiceStudio is the VoiceStudio app on this computer (voicestudio.mjs): no key, its selected engine, the user's saved
-//   VoiceStudio voice. A reply that fails there is reported and stays text; it never falls back to a paid service.
+// - The local voice ('voicestudio' internally, the slot VoiceStudio had) is Kokoro on this computer (kokoro.mjs): no key,
+//   a voice per personality. A reply that fails there is reported and stays text; it never falls back to a paid service.
 //   Beats aren't made in it (each one would hold up the GPU for seconds), so its replies have none.
 // - Fish Audio: the model is the one the user picked (Drama 3 or S2.1 Pro) while the account has credit, the free tier
 //   otherwise (checked when the key is set, at start and after a failure). If a reply's voice fails before any
@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_VOICE, FISH_MODELS, FREE_MODEL, FishVoice, RATE, fishAccount } from './fish.mjs';
-import { StudioVoice, studioStatus } from './voicestudio.mjs';
+import { KokoroVoice, kokoroStatus } from './kokoro.mjs';
 import { cueFeel } from './speech.mjs';
 import { GEMINI_DEFAULT_VOICE, GEMINI_MODEL, GEMINI_MODELS, GEMINI_PITCH, GEMINI_RATE, GeminiVoice, geminiAccount } from './gemini.mjs';
 
@@ -82,7 +82,7 @@ export function voiceProblemText(what, name) {
 }
 
 // beatStore: { read(name), write(name, data) }, where beats made here are kept between runs (none: made again each run).
-export function createSpeaker({ emit, onProblem = () => {}, log = () => {}, FishVoiceImpl = FishVoice, account = fishAccount, providers = {}, beatPhrases = BEATS, bundled = bundledBeats(), beatStore = null, LocalVoiceImpl = StudioVoice, localStatus = studioStatus, prewarmMs = PREWARM_MS,
+export function createSpeaker({ emit, onProblem = () => {}, log = () => {}, FishVoiceImpl = FishVoice, account = fishAccount, providers = {}, beatPhrases = BEATS, bundled = bundledBeats(), beatStore = null, LocalVoiceImpl = KokoroVoice, localStatus = kokoroStatus, prewarmMs = PREWARM_MS,
   keepWarmMs = KEEP_WARM_MS, keepWarmIdleMs = KEEP_WARM_IDLE_MS, studioQuietMs = STUDIO_QUIET_MS, now = () => Date.now(), setTimer = (f, ms) => setTimeout(f, ms), clearTimer = (h) => clearTimeout(h) }) {
   const all = { ...PROVIDERS, fish: { ...PROVIDERS.fish, Voice: FishVoiceImpl, account }, ...providers };
   let P = all.fish; // the service in use

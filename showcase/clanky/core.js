@@ -14,6 +14,24 @@
   const R = (window.Clanky = { types: [], TAU, clamp, lerp, damp, rand, angDamp });
   R.register = (def) => R.types.push(def);
   R.unit = (env) => env.unit ?? Math.min(env.w, env.h);
+  // design/RENDERING.md §1: canvases are sized from devicePixelRatio, so their setup is redone when it changes (the
+  // window moved to a display with another scale). fn runs on every change until it returns false.
+  R.onDprChange = (fn) => {
+    const arm = () => matchMedia(`(resolution: ${devicePixelRatio}dppx)`).addEventListener('change', () => { if (fn() !== false) arm(); }, { once: true });
+    arm();
+  };
+  // RENDERING.md §5 self-check: devicePixelRatio, and each canvas's backing width against clientWidth x dpr. The
+  // page hands it to the sidecar, which logs it only when CLANKY_DEBUG includes "render"; it's in the console too.
+  R.renderCheck = (page) => {
+    const dpr = devicePixelRatio || 1;
+    const canvases = [...document.querySelectorAll('canvas')].filter((c) => c.clientWidth && getComputedStyle(c).visibility !== 'hidden').map((c) => ({
+      id: c.id || c.className || 'canvas', width: c.width, clientWidth: c.clientWidth,
+      ok: Math.abs(c.width - Math.round(c.clientWidth * Math.min(2, dpr))) <= 1,
+    }));
+    const r = { page, dpr, canvases };
+    console.info('[render]', JSON.stringify(r));
+    return r;
+  };
   // Screen edges covered by the menu bar / Dock / taskbar, in CSS px. The desktop host keeps it current.
   R.safe = { top: 0, right: 0, bottom: 0, left: 0 };
   R.setSafe = (s) => { for (const k of ['top', 'right', 'bottom', 'left']) R.safe[k] = Math.max(0, +s?.[k] || 0); R.origin = { x: +s?.ox || 0, y: +s?.oy || 0 };
@@ -561,6 +579,7 @@
       for (const o of list) { o.env.w = W; o.env.h = H; o.env.dpr = dpr; o.c.resize?.(o.env); }
     };
     addEventListener('resize', resize);
+    R.onDprChange(resize);
     resize();
     R.tiles = list.map((o) => ({ def: o.def, creature: o.c, env: o.env }));
 
@@ -694,13 +713,16 @@
       if (shown && !same) {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Words drawn this frame go to the DOM text layer (textlayer.js), crisp at any scale (RENDERING.md §3).
+        R.textLayer?.begin(canvas, vx, vy, dpr);
         for (const o of order) {
           ctx.setTransform(dpr, 0, 0, dpr, -vx * dpr, -vy * dpr);
           ctx.save();
           o.c.draw(ctx, o.env);
           ctx.restore();
         }
-      }
+        R.textLayer?.end();
+      } else if (!shown) R.textLayer?.clear();
       // Nothing on screen (drawn natively, or off it): just the bookkeeping, 30 times a second, off the display clock.
       if (!shown && !list.some((o) => o.c.mover.dragging)) { nap = setTimeout(() => { nap = 0; requestAnimationFrame(frame); }, 33); return; }
       requestAnimationFrame(frame);

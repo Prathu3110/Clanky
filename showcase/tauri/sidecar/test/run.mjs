@@ -31,7 +31,7 @@ const FIRST = [
   'speech.test.mjs',
   'fish.test.mjs',
   'gemini.test.mjs',
-  'voicestudio.test.mjs',
+  'kokoro.test.mjs',
   'wintray.test.mjs',
   'speaker.test.mjs',
   'secrets.test.mjs',

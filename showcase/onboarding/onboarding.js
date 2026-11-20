@@ -10,6 +10,10 @@
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const invoke = window.__TAURI__?.core?.invoke ?? preview();
   const send = (msg) => invoke('sidecar_send', { msg }).catch(() => {});
+
+  // RENDERING.md §5 self-check (logged by the sidecar only with CLANKY_DEBUG=render): at start and on every scale change.
+  const renderCheck = () => Clanky.renderCheck && send({ type: 'render_check', ...Clanky.renderCheck('guide') });
+  setTimeout(renderCheck, 4000); Clanky.onDprChange?.(() => { setTimeout(renderCheck, 500); });
   const sfx = (name, arg) => Clanky.sfx?.play(name, arg);
 
   // ---------------------------------------------------------------- the Sidekick
@@ -115,6 +119,7 @@
     sidekick.resize(env);
   }
   addEventListener('resize', resize);
+  Clanky.onDprChange(resize);
   addEventListener('pointermove', (e) => { Object.assign(env.mouse, { x: e.clientX, y: e.clientY, inside: true, active: true }); }, { passive: true });
   document.addEventListener('mouseleave', () => { env.mouse.active = false; });
   resize();
@@ -487,10 +492,10 @@
   });
 
   // ---------------------------------------------------------------- step 3: how replies come
-  // Text only, or Voice + text (spoken with Fish Audio, Gemini or VoiceStudio). Fish Audio and Gemini need the user's
-  // own key: picking one opens the field, and the key is checked before voice turns on. VoiceStudio runs on this
+  // Text only, or Voice + text (spoken with Fish Audio, Gemini or Kokoro). Fish Audio and Gemini need the user's
+  // own key: picking one opens the field, and the key is checked before voice turns on. Kokoro runs on this
   // computer and needs no key, only to be open: its status shows instead, with Check again. With Gemini and
-  // VoiceStudio there's also a voice to choose (Fish Audio's comes with the personality).
+  // Kokoro there's also a voice to choose (Fish Audio's comes with the personality).
   // link: where a key comes from. Gemini's is Google AI Studio's key page.
   // Ken's Fish Audio affiliate link (sign-up lands on their site; keys are under Developers). It's disclosed in
   // the UI: the #fish-link button in index.html reads "Get a free key (affiliate link)".
@@ -498,7 +503,7 @@
   const TTS = {
     fish: { name: 'Fish Audio', link: FISH_URL, get: 'Get a free key (affiliate link)', note: 'Spoken replies are billed to your own Fish Audio account.', send: 'ob_fishkey' },
     gemini: { name: 'Gemini', link: 'https://aistudio.google.com/apikey', get: 'Get a free key', note: 'Spoken replies are billed to your own Google AI Studio account.', send: 'ob_geminikey' },
-    voicestudio: { name: 'VoiceStudio', local: true },
+    voicestudio: { name: 'Kokoro', local: true },
   };
   // A row on this step coming or going: grows into its room and fades in, or the reverse, rather than popping.
   function showRow(n, on) {
@@ -520,7 +525,7 @@
     pick: null, prov: null, saving: false, changing: false, // prov: the service picked here, before its key is saved // changing: replacing a key that's already saved
     mode: () => replies.pick ?? (state?.replies === 'voice' ? 'voice' : 'text'),
     tts: () => replies.prov ?? (TTS[state?.tts] ? state.tts : 'fish'),
-    // VoiceStudio has no key: it counts once it's picked and answering.
+    // Kokoro has no key: it counts once it's picked and answering.
     hasKey: (p = replies.tts()) => (TTS[p]?.local ? state?.tts === p && !!state?.studio?.ok : !!state?.[`${p}Key`]),
     // Voice is on with the service shown here.
     on: () => state?.replies === 'voice' && replies.hasKey() && (state?.tts ?? 'fish') === replies.tts(),
@@ -529,7 +534,7 @@
       const mode = replies.mode(), on = replies.on(), t = TTS[replies.tts()];
       const CARDS = [
         ['text', 'Text only', 'Answers in my bubbles'],
-        ['voice', 'Voice + text', on ? 'Voice is on' : mode === 'voice' ? (t.local ? 'Needs VoiceStudio open' : `Needs a ${t.name} key`) : 'Said out loud too'],
+        ['voice', 'Voice + text', on ? 'Voice is on' : mode === 'voice' ? (t.local ? 'Needs Kokoro ready' : `Needs a ${t.name} key`) : 'Said out loud too'],
       ];
       $('replies').replaceChildren(...CARDS.map(([id, name, sub]) => {
         const checked = mode === id;
@@ -543,14 +548,14 @@
       if (!saved || mode !== 'voice') replies.changing = false;
       showRow($('tts-row'), mode === 'voice');
       look.radios('tts', Object.entries(TTS).map(([id, x]) => [id, x.name]), replies.tts(), replies.provider);
-      // VoiceStudio: ready (and its engine), or exactly why not.
+      // Kokoro: ready (and its engine), or exactly why not.
       const vs = t.local && state?.tts === replies.tts() ? state?.studio : null;
       showRow($('studio-row'), mode === 'voice' && !!t.local);
-      $('studio-status').textContent = !vs || vs.checking ? 'Checking VoiceStudio…' : vs.ok ? `VoiceStudio is ready${vs.engine ? ` · ${vs.engine}` : ''}` : vs.message || "VoiceStudio isn't available.";
+      $('studio-status').textContent = !vs || vs.checking ? 'Checking Kokoro…' : vs.ok ? `Kokoro is ready${vs.engine ? ` · ${vs.engine}` : ''}` : vs.message || "Kokoro isn't available.";
       $('studio-status').className = vs && !vs.checking && !vs.ok ? 'bad' : '';
-      // The voices, once it can speak: Gemini's ("Kore · Firm"), or the ones saved in VoiceStudio.
+      // The voices, once it can speak: Gemini's ("Kore · Firm"), or the ones saved in Kokoro.
       showRow($('gvoice-row'), mode === 'voice' && t !== TTS.fish && saved);
-      const voices = t.local ? [{ id: 'default', label: 'Engine default' }, ...(vs?.voices ?? []).map((v) => ({ id: v.id, label: v.name }))]
+      const voices = t.local ? (vs?.voices ?? []).map((v) => ({ id: v.id, label: v.name }))
         : (state?.geminiVoices ?? []).map((v) => ({ id: v.id, label: `${v.id} · ${v.style}` }));
       const list = JSON.stringify(voices);
       if ($('gvoice').dataset.list !== list) { $('gvoice').dataset.list = list; $('gvoice').replaceChildren(...voices.map((v) => el('option', { value: v.id, textContent: v.label }))); }
@@ -583,7 +588,7 @@
       replies.render();
       if (id === 'voice' && !replies.hasKey() && !TTS[replies.tts()].local) { $('fish-input').focus(); quip(`Got a ${TTS[replies.tts()].name} key?`, 3); }
     },
-    // One with a key saved (or VoiceStudio, which checks itself) speaks straight away; the others ask for a key first.
+    // One with a key saved (or Kokoro, which checks itself) speaks straight away; the others ask for a key first.
     provider(p) {
       replies.prov = p; replies.changing = false; $('fish-error').hidden = true; $('fish-input').value = '';
       if (replies.hasKey(p) || TTS[p].local) send({ type: 'ob_tts', provider: p });
@@ -1392,8 +1397,8 @@
         }, 900);
       } else if (m.type === 'ob_tts') {
         st.tts = m.provider;
-        // ?studio=off: VoiceStudio isn't running.
-        st.studio = m.provider === 'voicestudio' ? (q.get('studio') === 'off' ? { ok: false, reason: 'offline', message: 'Run VoiceStudio first.' } : { ok: true, engine: 'OmniVoice', voices: [{ id: 'a642d572', name: 'Ben' }], voice: null }) : null;
+        // ?studio=off: Kokoro isn't running.
+        st.studio = m.provider === 'voicestudio' ? (q.get('studio') === 'off' ? { ok: false, reason: 'offline', message: 'Run Kokoro first.' } : { ok: true, engine: 'OmniVoice', voices: [{ id: 'a642d572', name: 'Ben' }], voice: null }) : null;
         if (st[`${m.provider}Key`] || st.studio?.ok) st.replies = 'voice';
         reply({ ...st });
       }

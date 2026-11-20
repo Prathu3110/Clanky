@@ -109,7 +109,8 @@
 
       // ---------- the ghost ----------
       // gcolor: this one's own ghost colour (a picker tile), else the personality's (ghost.js).
-      let gpos = null, gstate = 'idle', gcolor;
+      // glideOff: the shift draw() gives the grid layer while it follows; the ghost is at its true spot, so it's taken back off.
+      let gpos = null, gstate = 'idle', gcolor, glideOff = [0, 0];
       const GSCALE = () => (form === 'small' ? 1 : 2);
       // Its box on screen: centred on the body point, or at cursor size with its top-left on the pointer's tip.
       const ghostBox = (bx, by) => {
@@ -146,8 +147,9 @@
         const g = GH();
         if (!g || !gpos || pres.state === 'hidden') return;
         const o2 = { state: gstate, t, reduced: !!env.reduced, show: ghostShow(), dpr: env.dpr || 1, color: gcolor ?? g.color };
-        if (form === 'cursor') g.cursor(ctx, gpos.x - AX * P, gpos.y - AY * P, o2);
-        else g.draw(ctx, gpos.x, gpos.y, { ...o2, scale: GSCALE() });
+        const x = gpos.x - glideOff[0], y = gpos.y - glideOff[1];
+        if (form === 'cursor') g.cursor(ctx, x - AX * P, y - AY * P, o2);
+        else g.draw(ctx, x, y, { ...o2, scale: GSCALE() });
       };
 
       // ---------- presence performances ----------
@@ -629,7 +631,8 @@
           ctx.save();
           // Snapped to whole screen pixels: a part-pixel shift resamples the dots unevenly, so they'd shimmer.
           const dpr = env.dpr || 1;
-          if (glide) ctx.translate(Math.round((bx - Math.round(bx / P) * P) * dpr) / dpr, Math.round((by - Math.round(by / P) * P) * dpr) / dpr);
+          glideOff = glide ? [Math.round((bx - Math.round(bx / P) * P) * dpr) / dpr, Math.round((by - Math.round(by / P) * P) * dpr) / dpr] : [0, 0];
+          if (glide) ctx.translate(glideOff[0], glideOff[1]);
           const crt = crtXform(), mx = morphXform();
           if (crt) {
             ctx.save();

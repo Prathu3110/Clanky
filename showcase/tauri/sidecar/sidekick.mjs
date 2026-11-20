@@ -134,9 +134,9 @@ const DEFAULTS = {
   onboarded: false, onboardStep: 0, filesAsked: false, keys: DEFAULT_KEYS, muteWhileTalking: true, volume: 100, autoListen: false, listenEvery: false, listenSecs: 8, lite: false, wakeWord: false, setupVersion: 0, size: 'default', introDone: false,
   replies: 'text', // 'voice': spoken (with Fish Audio or Gemini) as well as shown
   speechLang: 'auto', // the language talking is recognised in (macOS): 'auto' follows the Mac's language list, or a locale like 'ar-SA'
-  tts: 'fish', // which one speaks: 'fish' (Fish Audio), 'gemini' or 'voicestudio' (the VoiceStudio app on this computer)
-  studioSpeak: 'short', // how much VoiceStudio says out loud: 'short', 'medium' or 'full' (it renders slower than real time)
-  studioVoices: {}, // personality → its VoiceStudio voice (a saved profile id; none: the selected engine's default voice)
+  tts: 'fish', // which one speaks: 'fish' (Fish Audio), 'gemini' or 'voicestudio' (Kokoro on this computer; the id is the old VoiceStudio one, kept for saved settings)
+  studioSpeak: 'short', // how much Kokoro says out loud: 'short', 'medium' or 'full'
+  studioVoices: {}, // personality → its Kokoro voice (none: the personality's own default)
   fishModel: FISH_CHOICES[0].id, // Drama 3 (most expressive) or S2.1 Pro (natural pace, cheaper)
   geminiVoices: {}, // personality → the Gemini voice it speaks in, where picked in the setup guide or the panel (else its default)
   geminiModel: GEMINI_MODEL, // Flash Lite (quick, cheaper) or Flash (studio quality)
@@ -156,17 +156,17 @@ const sizeNow = () => (SIZES.some(([s]) => s === config.size) ? config.size : 'd
 // what it says when picked (Settings and the setup guide show the same words)]. Tone only: what it does never changes.
 const NAME = 'Clanky';
 const PERSONALITIES = [
-  ['classic', 'Classic', 'warm, funny, a little cheeky.', DEFAULT_VOICE, 'Puck', "Hi, I'm Clanky!"],
-  ['butler', 'Butler', "a devoted old-school gentleman's butler: courteous, composed and discreet, with dry, affectionate wit. You report work like a butler reporting to the house: what's been seen to, what's still in hand in the background, and anything that needs their word, in a sentence or two. A finished job sounds settled and quietly satisfying. You never fuss or grovel, and you speak your mind, gently, when it matters.", 'e13fa398a7f445a685316a3de6089ce7', 'Charon', 'At your service.'],
-  ['sage', 'Teacher', "a patient philosopher-teacher in the Socratic tradition: curious, calm and reflective. When they're learning or deciding something, you ask a question or two to help them reason it out, then give the answer and the deeper idea behind it, often with an analogy. For quick tasks and plain facts you answer at once, with at most one thoughtful line.", '06cfdb3653a4496983d6ad77f98cc184', 'Sadaltager', 'Shall we think it through together?'],
-  ['sassy', 'Sassy', "sassy and quick-witted: playful teasing, mock exasperation and confident one-liners, but never mean, rude or belittling. The sass is about the situation, never about them as a person, and you drop it at once when they're stressed, upset or something is serious. You always help fully.", '84aadb575ed74e9aa44ba7ab8619d1a1', 'Despina', "Oh, it's you. Kidding! Hi."],
+  ['classic', 'Classic', 'warm, funny, a little cheeky.', DEFAULT_VOICE, 'Puck', "Hi, I'm Clanky!", 'af_heart'],
+  ['butler', 'Butler', "a devoted old-school gentleman's butler: courteous, composed and discreet, with dry, affectionate wit. You report work like a butler reporting to the house: what's been seen to, what's still in hand in the background, and anything that needs their word, in a sentence or two. A finished job sounds settled and quietly satisfying. You never fuss or grovel, and you speak your mind, gently, when it matters.", 'e13fa398a7f445a685316a3de6089ce7', 'Charon', 'At your service.', 'bm_george'],
+  ['sage', 'Teacher', "a patient philosopher-teacher in the Socratic tradition: curious, calm and reflective. When they're learning or deciding something, you ask a question or two to help them reason it out, then give the answer and the deeper idea behind it, often with an analogy. For quick tasks and plain facts you answer at once, with at most one thoughtful line.", '06cfdb3653a4496983d6ad77f98cc184', 'Sadaltager', 'Shall we think it through together?', 'bm_fable'],
+  ['sassy', 'Sassy', "sassy and quick-witted: playful teasing, mock exasperation and confident one-liners, but never mean, rude or belittling. The sass is about the situation, never about them as a person, and you drop it at once when they're stressed, upset or something is serious. You always help fully.", '84aadb575ed74e9aa44ba7ab8619d1a1', 'Despina', "Oh, it's you. Kidding! Hi.", 'af_bella'],
 ];
 const persona = () => PERSONALITIES.find(([id]) => id === config.personality) ?? PERSONALITIES[0];
 const styleNow = () => persona()[2];
 const fishVoice = () => persona()[3];
-// Its voice with Gemini and with VoiceStudio: the user's pick for this personality, else its own default.
+// Its voice with Gemini and with Kokoro: the user's pick for this personality, else its own default.
 const geminiVoice = () => config.geminiVoices?.[persona()[0]] ?? persona()[4] ?? GEMINI_DEFAULT_VOICE;
-const studioVoice = () => config.studioVoices?.[persona()[0]] ?? null;
+const studioVoice = () => config.studioVoices?.[persona()[0]] ?? persona()[6] ?? null;
 const VOICE_OK = hasVoice(process.platform);
 // Windows and Linux have no on-device speech API apps can use, so voice there runs Parakeet on the PC. Its model
 // is downloaded once: from the setup guide, or the first time voice is used.
@@ -194,7 +194,7 @@ let routed = null, defaultPick = null;
 let turnWords = ''; // what they said this turn, verbatim: attached to every handoff (route, agents)
 const saveConfig = () => writeJson(CONFIG_PATH, routed && defaultPick ? { ...config, provider: defaultPick.provider, model: defaultPick.model } : config, { backup: true });
 
-// ---------- spoken replies (Fish Audio, Gemini or VoiceStudio) ----------
+// ---------- spoken replies (Fish Audio, Gemini or Kokoro) ----------
 // The key is the user's own: in the Keychain (macOS), DPAPI-encrypted (Windows) or the desktop's keyring (Linux),
 // never in the config or logs.
 // Each service has its own: secret is its name in that store, site is where a key comes from.
@@ -202,7 +202,7 @@ const TTS = {
   fish: { id: 'fish', name: 'Fish Audio', secret: 'fish-audio', site: 'fish.audio' },
   gemini: { id: 'gemini', name: 'Gemini', secret: 'gemini-tts', site: 'aistudio.google.com' },
   // On this computer: no key, never falls back to a paid service when it isn't running.
-  voicestudio: { id: 'voicestudio', name: 'VoiceStudio', local: true },
+  voicestudio: { id: 'voicestudio', name: 'Kokoro', local: true }, // the local voice slot (the old VoiceStudio id, kept for saved settings)
 };
 const tts = () => TTS[config.tts] ?? TTS.fish;
 // Which have a key to speak with: 'own' (saved for the voice), 'shared' (Gemini only: the AI's Gemini key, from the
@@ -231,7 +231,7 @@ const speech = createSpeaker({
   log: (kind, data) => logLine(kind, data),
   // Once in a while, not on every reply: the text is there either way.
   onProblem: (what) => {
-    // VoiceStudio: said once a minute at most (it's local, so the reason is something they can fix now).
+    // Kokoro: said once a minute at most (it's local, so the reason is something they can fix now).
     if (what?.provider === 'voicestudio') {
       if (Date.now() - voiceProblemAt < 60_000) return;
       voiceProblemAt = Date.now();
@@ -253,7 +253,7 @@ async function syncGeminiVoiceKey() {
 // Point the speaker at a service, with its voice and model. Its key is set after (a change of service clears it).
 function aimSpeaker(id) {
   speech.setProvider(id);
-  speech.setStudioSpeak?.(config.studioSpeak); // how much VoiceStudio says out loud
+  speech.setStudioSpeak?.(config.studioSpeak); // how much Kokoro says out loud
   if (TTS[id]?.local) speech.setLocalVoice(studioVoice());
   else if (id === 'gemini') { speech.setVoice(geminiVoice()); speech.setModel(config.geminiModel); }
   else { speech.setVoice(fishVoice()); speech.setModel(config.fishModel); }
@@ -759,7 +759,7 @@ function anim(name, args = {}) {
 const SLOW_TOOLS = new Set(['web_search', 'web_fetch', 'see_photo', 'take_screenshot', 'read_window', 'act_in_app', 'run_command', 'search_files', 'list_windows']);
 // How replies are written: for bubbles (text only), or for the ear (spoken with Fish Audio or Gemini, details on screen).
 const VOICE_ON = () => config.replies === 'voice' && speech.on;
-// VoiceStudio's engines would read voice cues out, so its prompt has no cue paragraph (and any cue left is removed).
+// Kokoro's engines would read voice cues out, so its prompt has no cue paragraph (and any cue left is removed).
 const replyStyle = () => (!VOICE_ON() ? TEXT_STYLE : tts().local ? VOICE_STYLE.replace(/^Your voice carries feeling:.*\n/m, '') : VOICE_STYLE);
 const TEXT_STYLE = `You talk through small speech bubbles, so keep replies short: one to three sentences unless asked for detail. Light markdown shows properly (**bold** for the key word, \`code\` for commands and file names, [links](https://…)), but skip headings and tables in a bubble, and never narrate actions like *waves*. One exception: when the answer is genuinely a list, steps or a breakdown, it shows on a card beside you instead of a bubble. Then start with a one-sentence answer, follow with 3 to 6 short points as "- " lines (one fact each, under 20 words), and if you used the web this turn, end with a line "Sources: " and the site names as [name](url) links. A quick fact from the web (a score, a date, the weather, who someone is) stays a short bubble, with no points and no sources. Markdown renders on the card (bold, \`code\`, links, headings, tables, code blocks), so use what helps, but no preamble. Everything else stays a short bubble with no "- " lines. Amounts, a comparison, a place, dates, a process and maths are drawn, not listed: for those use draw (see "Show, don't just tell") and write no "- " lines; so are the steps of a how-to in an app on their screen (a walkthrough). An emoji now and then is fine; the bubbles show them. `;
 const VOICE_STYLE = `You talk out loud: what you write is spoken in your voice and shown in a small bubble, so write for the ear. Say one to three short sentences, the way you'd talk to a friend: plain words, contractions, about 6 to 20 words each. What you say has no markdown, emoji, links, file paths or code; name the site, file or app instead. Say numbers, times and money the way people say them. Anything to read rather than hear goes below what you say and is never read out: "- " lines for points, options or steps (3 to 6, one fact each, under 20 words), "> " lines for a draft they'll send or copy (an email, message or post), and a \`\`\` block for code. What they asked to hear (a story, a joke, advice) is spoken, not put on screen: say it, short (a story in 4 to 6 sentences). An explanation is spoken too, in a few sentences, with a drawing beside it when a picture carries it (see "Show, don't just tell"). An answer from the web is said like any other: a quick fact (a score, a date, the weather, who someone is) is just your sentences, no points and no sources. Only when the answer is genuinely a list, steps or a breakdown that's easier to read than hear, say it in one or two sentences, then the "- " points, then, if you used the web, a line "Sources: " with the site names as [name](url) links: those show on a card beside you and only your sentences are spoken. Amounts, a comparison, a place, dates, a process and maths are drawn, not listed: for those use draw (see "Show, don't just tell") and write no "- " lines; so are the steps of a how-to in an app on their screen (a walkthrough). Never say "here's a list" or read out what's on screen; a few words pointing to it are enough ("the steps are on screen").
@@ -1820,7 +1820,7 @@ async function setReplies(mode) {
   if (config.replies === mode) return;
   config.replies = mode; saveConfig();
   agentStale = true; // the spoken and written styles are different prompts
-  if (mode === 'text') { speech.stop(); speech.stopWarm?.(); } // no spoken replies: VoiceStudio isn't kept warm either
+  if (mode === 'text') { speech.stop(); speech.stopWarm?.(); } // no spoken replies: Kokoro isn't kept warm either
   menu(); if (onboarding) obState();
   if (mode === 'voice') speakLine('Voice is on. This is how I sound.');
   else say('Text only from now on.', 'happy');
@@ -1844,12 +1844,12 @@ async function setTts(id) {
   menu(); if (onboarding) obState();
   if (TTS[id].local) {
     if (!(await studioReady())) return;
-    if (!VOICE_ON()) return say('VoiceStudio is ready. Turn on Voice and text to hear it.', 'happy');
+    if (!VOICE_ON()) return say('Kokoro is ready. Turn on Voice and text to hear it.', 'happy');
   }
   if (VOICE_ON()) speakLine('This is how I sound.');
 }
 
-// VoiceStudio checked now; when it isn't ready, the reason is said (and shown where it was asked from).
+// Kokoro checked now; when it isn't ready, the reason is said (and shown where it was asked from).
 async function studioReady() {
   const s = await speech.checkLocal();
   menu(); if (onboarding) obState();
@@ -1857,7 +1857,7 @@ async function studioReady() {
   say(s.message, 'concerned'); panelNote(s.message, true);
   return false;
 }
-// 'default': the engine's own voice. Otherwise a saved VoiceStudio voice id; once the list is known, only those.
+// 'default': the engine's own voice. Otherwise a saved Kokoro voice id; once the list is known, only those.
 function setStudioVoice(id) {
   const known = speech.local?.voices;
   if (id === 'default') id = null;
@@ -1868,7 +1868,7 @@ function setStudioVoice(id) {
   menu(); if (onboarding) obState();
   if (tts().local && VOICE_ON()) speakLine('This is my new voice.');
 }
-// VoiceStudio for the Voice page and the guide: checked yet, ready or why not, its engine, and the voices saved there.
+// Kokoro for the Voice page and the guide: checked yet, ready or why not, its engine, and the voices saved there.
 const studioState = () => {
   const l = speech.local;
   if (!l) return { checking: true, voice: speech.localVoice };
@@ -2866,6 +2866,8 @@ createInterface({ input: process.stdin }).on('line', (line) => {
   if (m.type === 'menu') onMenu(m.id, m.via).catch((e) => console.error('menu', e));
   else if (m.type === 'panel_open') { panelOpen = true; panelAt = Date.now(); logLine('panel_open', {}); if (VOICE_OK) send({ type: 'voice_mics' }); Promise.all([refreshAuth(), signedIn.get('local') && syncLocal(), tts().local && speech.checkLocal()]).catch(() => {}).finally(() => { panel(); refreshCatalogs(); }); }
   else if (m.type === 'diagnostics') { shellInfo?.(m); shellInfo = null; }
+  // RENDERING.md §5 self-check from a page (dev only: CLANKY_DEBUG=render): its dpr and each canvas's backing width.
+  else if (m.type === 'render_check' && /\brender\b/.test(process.env.CLANKY_DEBUG ?? '')) logLine('render_check', { page: String(m.page).slice(0, 20), dpr: Number(m.dpr), canvases: (Array.isArray(m.canvases) ? m.canvases : []).slice(0, 40).map((c) => ({ id: String(c?.id).slice(0, 40), width: Number(c?.width), clientWidth: Number(c?.clientWidth), ok: !!c?.ok })) });
   else if (m.type === 'panel_closed') { panelOpen = false; logLine('panel_closed', { why: String(m.why ?? ''), ms: Date.now() - panelAt }); }
   else if (m.type === 'panel_key' && typeof m.provider === 'string' && typeof m.key === 'string') {
     const id = typeof m.kind === 'string' ? m.kind : m.provider;

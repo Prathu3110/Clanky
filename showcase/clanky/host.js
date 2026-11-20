@@ -6,6 +6,10 @@
   const invoke = window.__TAURI__?.core?.invoke;
   if (!invoke) return;
   const send = (msg) => invoke('sidecar_send', { msg }).catch(() => {});
+
+  // RENDERING.md §5 self-check (logged by the sidecar only with CLANKY_DEBUG=render): at start and on every scale change.
+  const renderCheck = () => Clanky.renderCheck && send({ type: 'render_check', ...Clanky.renderCheck('overlay') });
+  setTimeout(renderCheck, 4000); Clanky.onDprChange?.(() => { setTimeout(renderCheck, 500); });
   const typing = (on) => invoke('set_typing', { on }).catch(() => {});
   // Drawings (ink.js) talk to the sidecar (started, waits done, buttons, closed cards) and arm the shell's click watch.
   if (Clanky.ink) { Clanky.ink.send = send; Clanky.ink.invoke = (cmd, args) => invoke(cmd, args).catch(() => {}); }

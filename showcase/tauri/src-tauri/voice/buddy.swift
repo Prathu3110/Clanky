@@ -44,6 +44,7 @@ final class Buddy: NSObject {
         view.autoresizingMask = [.width, .height]
         body.contentsGravity = .resize
         body.magnificationFilter = .nearest
+        body.minificationFilter = .nearest // RENDERING.md §2: never smoothed either way
         body.anchorPoint = .zero
         body.actions = ["position": NSNull(), "bounds": NSNull(), "contents": NSNull()]
         view.layer!.addSublayer(body)

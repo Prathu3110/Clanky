@@ -10,7 +10,7 @@ assert.match(mac, /lives in the menu bar at the top of the screen/);
 assert.match(mac, /Show Clanky, Ask Clanky…, Ask About an Area…, Stop, Quit Clanky/);
 assert.match(mac, /Personality: Classic, Butler, Teacher or Sassy, each with its own tone, ghost colour and voice/);
 assert.match(mac, /Wake word \(say "Hey Clanky"/);
-assert.match(mac, /Voice Provider: Fish Audio, Gemini or VoiceStudio/);
+assert.match(mac, /Voice Provider: Fish Audio, Gemini or Kokoro/);
 assert.match(win, /bottom right of the taskbar/);
 assert.ok(!/Ask About an Area|Wake word|Voice Control|Cursor, a little arrow/.test(win), 'features this copy lacks are left out');
 assert.match(linux, /AppIndicator extension/);

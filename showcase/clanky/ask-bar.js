@@ -55,7 +55,7 @@
 
   let el = null, ta = null, on = false, draft = '', pick = false, at = [0, 0], size = [320, 38], cursor = null, openedAt = 0, cb = {};
   const bounds = () => { const S = R.safe ?? { top: 0, right: 0, bottom: 0, left: 0 }; return { l: S.left + 8, t: S.top + 8, r: innerWidth - S.right - 8, b: innerHeight - S.bottom - 8 }; };
-  const put = (p) => { at = p; el.style.transform = `translate(${p[0]}px, ${p[1]}px)`; };
+  const put = (p) => { at = p; el.style.transform = `translate(${Math.round(p[0])}px, ${Math.round(p[1])}px)`; }; // whole px: no resampled text
   const over = (x, y) => x >= at[0] && x <= at[0] + size[0] && y >= at[1] && y <= at[1] + size[1];
   // It holds still while the cursor is on it (so it can be clicked); else it's beside the cursor.
   const held = () => !cursor || over(cursor[0], cursor[1]);

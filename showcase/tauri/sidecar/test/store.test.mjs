@@ -336,3 +336,12 @@ console.log('store tests: all passed');
   assert.equal(fs.readFileSync(mem, 'utf8'), newer, 'newer memory.json left untouched');
   console.log('downgrade guard: passed');
 }
+
+{
+  // Hidden thinking (empty text, a signature) still counts towards the history's size, so long chats get folded.
+  const S9 = await import('../store.mjs?thinking');
+  const sig = 'x'.repeat(3600);
+  const withThinking = [{ role: 'assistant', content: [{ type: 'thinking', text: '', signature: sig }, { type: 'text', text: 'hi' }] }];
+  assert.ok(S9.approxTokens(withThinking) >= 1000, 'thinking signature counted');
+  console.log('thinking counted: passed');
+}
