@@ -125,7 +125,10 @@ export function forProvider(messages, from, to) {
 
 // ---------- context budget ----------
 
-const textLen = (c) => (typeof c === 'string' ? c.length : Array.isArray(c) ? c.reduce((n, p) => n + (p?.type === 'image' ? 6000 : (p?.text ?? p?.content ?? '').length + JSON.stringify(p?.args ?? '').length), 0) : 0);
+// Hidden thinking comes back as an empty text and a signature, yet the model still reads (and bills) it every call:
+// the signature's length stands in for it, or a long history looks small and is never folded.
+// ponytail: signature length is only a proxy for the hidden thinking's size; switch to measured counts if it drifts.
+const textLen = (c) => (typeof c === 'string' ? c.length : Array.isArray(c) ? c.reduce((n, p) => n + (p?.type === 'image' ? 6000 : (p?.text ?? p?.content ?? '').length + JSON.stringify(p?.args ?? '').length + (p?.type === 'thinking' ? (p.signature ?? '').length : 0)), 0) : 0);
 const approxChars = (m) => (m.role === 'tool' ? m.content.reduce((n, r) => n + textLen(r.content), 0) : textLen(m.content));
 
 // Window reads from earlier requests are out of date and large; they shrink to their first line.
