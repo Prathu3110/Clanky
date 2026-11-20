@@ -27,7 +27,7 @@ for (const f of ['glass.js', 'ink.js', 'agent.js', 'agent-panel.js', 'agent-home
   assert.match(js(f), /"Martian Mono", "Clanky Arabic"/, `${f}: Arabic letters after Martian Mono`);
 }
 assert.match(js('core.js'), /R\.rtlFont = \(s, font\) => \(R\.rtl\(s\) \? String\(font\)\.replace\('"Martian Mono"', '"Clanky Arabic RTL", "Martian Mono"'\)/, 'right-to-left canvas text puts the Arabic face first');
-assert.match(js('agent.js'), /const rf = R\.rtlFont\(line\.s, fontFor\(0\)\)/, 'the bubble draws Arabic lines with it');
+assert.match(js('agent.js'), /const rf = R\.rtlFont\(line\.s, font\)/, 'the bubble draws Arabic lines with it');
 assert.match(js('agent-panel.js'), /\.rp-body :dir\(rtl\) \{ font-family: "Clanky Arabic RTL"/, 'the card too, per paragraph');
 assert.match(js('notch.js'), /\.nc-line:dir\(rtl\) \{ font-family: "Clanky Arabic RTL"/, 'and the capsule, per line');
 assert.match(js('ask-bar.js'), /ta\.dir = 'auto'/, 'typing Arabic runs right to left');

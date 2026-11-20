@@ -713,13 +713,16 @@
       if (shown && !same) {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Words drawn this frame go to the DOM text layer (textlayer.js), crisp at any scale (RENDERING.md §3).
+        R.textLayer?.begin(canvas, vx, vy, dpr);
         for (const o of order) {
           ctx.setTransform(dpr, 0, 0, dpr, -vx * dpr, -vy * dpr);
           ctx.save();
           o.c.draw(ctx, o.env);
           ctx.restore();
         }
-      }
+        R.textLayer?.end();
+      } else if (!shown) R.textLayer?.clear();
       // Nothing on screen (drawn natively, or off it): just the bookkeeping, 30 times a second, off the display clock.
       if (!shown && !list.some((o) => o.c.mover.dragging)) { nap = setTimeout(() => { nap = 0; requestAnimationFrame(frame); }, 33); return; }
       requestAnimationFrame(frame);

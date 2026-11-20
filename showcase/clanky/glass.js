@@ -83,6 +83,14 @@
     c.save(); c.font = R.rtlFont ? R.rtlFont(str, font) : font; c.textBaseline = o.baseline || 'middle'; c.textAlign = 'left';
     const full = c.measureText(str).width, x0 = o.anchor === 'middle' ? x - full / 2 : o.anchor === 'end' ? x - full : x;
     const n = Math.floor(str.length * clamp(u, 0, 1));
+    // On the stage: real DOM text (textlayer.js), the last couple of letters still in the secondary ink.
+    const TL = R.textLayer;
+    if (TL?.on(c)) {
+      const head = n >= str.length ? str : str.slice(0, Math.max(0, n - 2)), tail = n >= str.length ? '' : str.slice(head.length, n);
+      if (n > 0) TL.text(c, { html: TL.esc(head) + (tail ? `<span style="color:${INK_SOFT}">${TL.esc(tail)}</span>` : ''), x: x0, y, font: c.font, color, baseline: c.textBaseline });
+      c.restore();
+      return full;
+    }
     if (n >= str.length) { c.fillStyle = color; c.fillText(str, x0, y); }
     else if (n > 0) { const head = str.slice(0, Math.max(0, n - 2)); c.fillStyle = color; c.fillText(head, x0, y); c.fillStyle = INK_SOFT; c.fillText(str.slice(head.length, n), x0 + c.measureText(head).width, y); }
     c.restore();
@@ -144,7 +152,9 @@
     c.fillStyle = o.filled ? (o.hover ? mix(ACC, '#ffffff', 0.2) : ACC) : o.hover ? OAT2 : GLASS; c.fill(face);
     c.strokeStyle = INK; c.lineWidth = 1.5; c.stroke(face);
     c.font = CHIP_F; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = INK_DARK;
-    c.fillText(String(label ?? ''), x + w / 2, y + h / 2 + 0.5);
+    const s = String(label ?? '');
+    if (R.textLayer?.on(c)) R.textLayer.text(c, { str: s, x: x + w / 2 - textW(s, CHIP_F) / 2, y: y + h / 2 + 0.5, font: CHIP_F, color: INK_DARK });
+    else c.fillText(s, x + w / 2, y + h / 2 + 0.5);
     c.restore();
   }
 

@@ -5,61 +5,11 @@
   const R = window.Clanky;
   const { clamp, lerp } = R;
 
-  // ---------- dot-matrix glyphs: real font, supersampled, thresholded to two brightness levels ----------
-  const CW = 6, CH = 10, SS = 4;
-  const glyphs = new Map();
-  let gcan = null, gctx = null;
-  const glyph = (ch) => {
-    let g = glyphs.get(ch);
-    if (g) return g;
-    if (!gcan) {
-      gcan = document.createElement('canvas'); gcan.width = CW * SS; gcan.height = CH * SS;
-      gctx = gcan.getContext('2d', { willReadFrequently: true });
-    }
-    gctx.clearRect(0, 0, gcan.width, gcan.height);
-    gctx.fillStyle = '#fff'; gctx.textAlign = 'center'; gctx.textBaseline = 'alphabetic';
-    gctx.font = `700 ${9 * SS}px Menlo, "SF Mono", ui-monospace, monospace`;
-    gctx.fillText(ch, 2.5 * SS, 8 * SS);
-    const px = gctx.getImageData(0, 0, gcan.width, gcan.height).data;
-    const pts = [];
-    for (let y = 0; y < CH; y++) for (let x = 0; x < CW - 1; x++) {
-      let a = 0;
-      for (let j = 0; j < SS; j++) for (let i = 0; i < SS; i++) a += px[((y * SS + j) * gcan.width + x * SS + i) * 4 + 3];
-      a /= SS * SS * 255;
-      if (a > 0.5) pts.push(x, y, 2); else if (a > 0.26) pts.push(x, y, 1);
-    }
-    g = pts; glyphs.set(ch, g);
-    return g;
-  };
-
-  // Emoji: drawn as two cells of coloured LED dots. They take two UTF-16 units (a surrogate pair, or a symbol
-  // plus its emoji selector), which is also two columns in the layout, so wrapping and streaming line up.
+  // The bubble's line grid: CH rows of T() px per line (the type itself is DOM text, textlayer.js).
+  const CH = 10;
+  // Emoji take two UTF-16 units (a surrogate pair, or a symbol plus its emoji selector), which is also two columns in
+  // the layout, so wrapping and streaming line up.
   const EMOJI = /\p{Extended_Pictographic}/u;
-  const emojis = new Map();
-  let ecan = null, ectx = null;
-  // Returns [x, y, r, g, b, ...] dots on a (2*CW-1) x CH grid, or null if this font can't draw it.
-  const emojiGlyph = (cluster) => {
-    if (emojis.has(cluster)) return emojis.get(cluster);
-    const EW = CW * 2 - 1, S = 8;
-    if (!ecan) { ecan = document.createElement('canvas'); ecan.width = EW * S; ecan.height = CH * S; ectx = ecan.getContext('2d', { willReadFrequently: true }); }
-    ectx.clearRect(0, 0, ecan.width, ecan.height);
-    ectx.textAlign = 'center'; ectx.textBaseline = 'middle';
-    ectx.font = `${CH * S * 0.82}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
-    ectx.fillText(cluster, (EW * S) / 2, (CH * S) / 2 + S * 0.3);
-    const px = ectx.getImageData(0, 0, ecan.width, ecan.height).data;
-    const pts = [];
-    for (let y = 0; y < CH; y++) for (let x = 0; x < EW; x++) {
-      let r = 0, g = 0, bl = 0, a = 0;
-      for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
-        const o = ((y * S + j) * ecan.width + x * S + i) * 4, al = px[o + 3] / 255;
-        r += px[o] * al; g += px[o + 1] * al; bl += px[o + 2] * al; a += al;
-      }
-      if (a / (S * S) > 0.35) pts.push(x, y, Math.round(r / a), Math.round(g / a), Math.round(bl / a));
-    }
-    const g = pts.length ? pts : null;
-    emojis.set(cluster, g);
-    return g;
-  };
   // At index j of s: the emoji that starts there and how many units it covers, or null.
   const emojiAt = (s, j) => {
     const cp = s.codePointAt(j);
@@ -150,8 +100,6 @@
     const { m, face, PAL, L, th, put, setPx } = k;
     const DARK = PAL[0], EDGE = PAL[Math.max(1, L - 2)], RIM = PAL[L - 1], HOT = PAL[L];
     const css = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
-    const tcan = document.createElement('canvas');
-    const tctx = tcan.getContext('2d');
     let b = null, dying = [], now = 0, W = 800, H = 600, mouthT = 0, mouthMode = null, gestT = 0;
     let tool = null, lastPose = null, lookAt = null, actUntil = 0, typedAt = -9;
     // Context handed to tool performances (agent-tools.js): timing, sounds and the face; the task tag shows the rest.
@@ -690,100 +638,87 @@
       ctx.restore();
     };
 
-    // ---- the bubble's words: real type, crisp at any size ----
+    // ---- the bubble's words: real DOM text over the canvas (textlayer.js, design/RENDERING.md §3) ----
+    // Laid out on the bubble's own grid (cols x rows of colW x CH*T), so wrapping, the caret and scrolling match the frame.
+    let advPx = 0, advFor = 0;
+    const advance = (fpx) => {
+      if (advFor !== fpx) { const m = document.createElement('canvas').getContext('2d'); m.font = `500 ${fpx}px "Martian Mono", Menlo, monospace`; advPx = m.measureText('0').width; advFor = fpx; }
+      return advPx;
+    };
     const drawText = (ctx, env, bb) => {
+      const TL = R.textLayer;
+      if (!TL?.on(ctx)) return;
       const ph = bb.input && !bb.text;
       const fr = bb.frame;
       if (!fr || (!bb.text && !bb.input)) return;
-      const P = k.P, t = T(), dpr = env.dpr || 1, cw = colW(t), lh = CH * t;
+      const P = k.P, t = T(), cw = colW(t), lh = CH * t;
       const fade = bb.closing ? clamp(1 - bb.closing / 0.25, 0, 1) : clamp((bb.age - 0.08) / 0.2, 0, 1);
       if (fade <= 0 || bb.pop.x < 0.6) return;
-      // On whole device pixels: a part-pixel spot resamples the type and blurs it.
-      const ix = Math.round((fr.x + padX(bb) + dotsDx(bb)) * dpr) / dpr, iy = Math.round((fr.y + padY(bb)) * dpr) / dpr;
+      const ix = fr.x + padX(bb) + dotsDx(bb), iy = fr.y + padY(bb);
       const iw = bb.cols * cw, ih = bb.rows * lh;
-      const pw = Math.ceil(iw * dpr) + 2, phh = Math.ceil(ih * dpr) + 2;
-      if (tcan.width !== pw || tcan.height !== phh) { tcan.width = pw; tcan.height = phh; }
-      tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      tctx.clearRect(0, 0, iw + 2, ih + 2);
       const dim = bb.kind === 'thought' || (ph && !bb.input.choices);
       const lines = ph ? wrap(bb.input.placeholder || '', MAX_COLS) : bb.lines;
       const s0 = ph ? 0 : bb.scroll.x, first = Math.max(0, Math.floor(s0)), last = Math.min(lines.length - 1, first + bb.rows);
       const shown = ph ? 1e9 : Math.floor(bb.shown);
       const shownLines = lines.filter((l) => l.start < shown).length;
       const fadeTop = s0 > 0.02, fadeBot = s0 + bb.rows < shownLines - 0.02;
-      // Real type, not LED dots: crisp at any size, so a long answer stays easy to read.
-      const fpx = fontPx(t), base = bb.kind === 'thought' ? 400 : 500, md = R.md;
-      const fonts = new Map();
-      const fontFor = (st) => {
-        let f = fonts.get(st);
-        if (!f) {
-          const w = st & (md?.BOLD ?? 0) ? 700 : base, it = st & (md?.ITAL ?? 0) ? 'italic ' : '';
-          f = `${it}${w} ${fpx}px "Martian Mono", "Clanky Arabic", Menlo, ui-monospace, monospace`; fonts.set(st, f);
-        }
-        return f;
-      };
-      let curFont = '';
-      tctx.textBaseline = 'middle'; tctx.textAlign = 'left';
+      const fpx = fontPx(t), base = bb.kind === 'thought' ? 400 : 500, md = R.md, esc = TL.esc;
+      const ls = Math.round((cw - advance(fpx)) * 100) / 100; // letter spacing that puts each letter on its column
+      const font = `${base} ${fpx}px "Martian Mono", "Clanky Arabic", Menlo, ui-monospace, monospace`;
       const ink = dim ? css([94, 82, 72], 0.9) : TEXT_INK, accent = dim ? ink : TEXT_ACCENT;
+      const styleOf = (st) => {
+        let s = '';
+        if (md && st & md.BOLD) s += 'font-weight:700;';
+        if (md && st & md.ITAL) s += 'font-style:italic;';
+        if (md && st & (md.CODE | md.LINK)) s += `color:${accent};`;
+        if (md && st & md.LINK) s += 'text-decoration:underline;';
+        return s;
+      };
+      let html = '';
       for (let li = first; li <= last; li++) {
-        const line = lines[li], cy = (li - s0 + 0.5) * lh;
+        const line = lines[li], cy = (li - s0) * lh;
         // Lines scrolling past the top or bottom fade out instead of being cut in half.
-        const edge = Math.min(1, fadeTop ? (cy / lh) * 1.2 : 1, fadeBot ? ((ih - cy) / lh) * 1.2 : 1);
+        const mid = cy + lh / 2, edge = clamp(Math.min(1, fadeTop ? (mid / lh) * 1.2 : 1, fadeBot ? ((ih - mid) / lh) * 1.2 : 1), 0, 1);
         if (edge <= 0.02) continue;
-        tctx.globalAlpha = clamp(edge, 0, 1);
-        // Arabic and Hebrew: the line is drawn whole, right-aligned, so letters join and run right to left (letter
-        // by letter on the grid they came out disjoined and backwards, #69). It drops per-letter styling there.
+        const n = Math.min(line.s.length, shown - line.start);
+        if (n <= 0) continue;
+        const top = Math.round(cy);
+        // Arabic and Hebrew: the line whole, right-aligned, so letters join and run right to left (#69).
         if (R.rtl(line.s)) {
-          const n = Math.min(line.s.length, shown - line.start);
-          if (n > 0) {
-            const rf = R.rtlFont(line.s, fontFor(0)); // its own narrow space between Arabic words
-            if (curFont !== rf) { curFont = rf; tctx.font = rf; }
-            tctx.fillStyle = ink; tctx.direction = 'rtl'; tctx.textAlign = 'right';
-            tctx.fillText(line.s.slice(0, n).trimEnd(), iw, cy, iw);
-            tctx.direction = 'ltr'; tctx.textAlign = 'left';
-          }
+          const rf = R.rtlFont(line.s, font); // its own narrow space between Arabic words
+          html += `<div dir="rtl" style="position:absolute;left:0;top:${top}px;width:${Math.round(iw)}px;height:${lh}px;text-align:right;white-space:pre;letter-spacing:0;opacity:${edge};font:${esc(rf)};line-height:${lh}px">${esc(line.s.slice(0, n).trimEnd())}</div>`;
           continue;
         }
-        for (let j = 0; j < line.s.length; j++) {
-          const idx = line.start + j;
-          if (idx >= shown) break;
-          if (line.s[j] === ' ') {
-            // A link's underline runs on under the spaces between its words.
-            if (R.md && (bb.sty?.[idx] ?? 0) & R.md.LINK && (bb.sty?.[idx + 1] ?? 0) & R.md.LINK) { tctx.fillStyle = TEXT_ACCENT; tctx.fillRect(j * cw, cy + lh * 0.36, cw, Math.max(1, t * 0.4)); }
-            continue;
-          }
-          const em = emojiAt(line.s, j);
-          const ch = em ? em.cluster : line.s[j];
-          // Each new letter lands in the secondary ink, then settles to the text colour (code and links in the accent). It lands
-          // in place: a little hop per letter made the line being read shake while it streamed in.
-          const st = ph ? 0 : bb.sty?.[idx] ?? 0, f = fontFor(st);
-          if (f !== curFont) { tctx.font = f; curFont = f; }
-          const age = ph ? 9 : now - (bb.at[idx] ?? 0), x = j * cw + (em ? cw * 0.15 : 0), y = cy;
-          const marked = md && st & (md.CODE | md.LINK);
-          tctx.fillStyle = age < 0.12 ? TEXT_ACCENT : marked ? accent : ink;
-          tctx.fillText(ch, x, y);
-          if (md && st & md.LINK) tctx.fillRect(x, cy + lh * 0.36, cw, Math.max(1, t * 0.4));
-          if (em) j += em.n - 1;
+        // Runs of letters with the same style; each new letter lands in the secondary ink, then settles.
+        let row = '', run = '', runKey = null;
+        const flush = () => { if (run) row += runKey ? `<span style="${runKey}">${run}</span>` : run; run = ''; };
+        for (let j = 0; j < n; j++) {
+          const idx = line.start + j, em = emojiAt(line.s, j);
+          const st = ph ? 0 : bb.sty?.[idx] ?? 0, fresh = !ph && now - (bb.at[idx] ?? 0) < 0.12;
+          const key = styleOf(st) + (fresh ? `color:${TEXT_ACCENT};` : '');
+          if (key !== runKey) { flush(); runKey = key; }
+          if (em) {
+            // An emoji takes two columns, as in the layout.
+            run += `<span style="display:inline-block;width:${Math.round(cw * 2 - ls)}px;text-align:center;letter-spacing:0">${esc(em.cluster)}</span>`;
+            j += em.n - 1;
+          } else run += esc(line.s[j]);
         }
+        flush();
+        html += `<div style="position:absolute;left:0;top:${top}px;height:${lh}px;line-height:${lh}px;white-space:pre;opacity:${edge}">${row}</div>`;
       }
-      tctx.globalAlpha = 1;
       if (bb.input?.focused && !bb.input.listen && !bb.input.choices && Math.floor((now - bb.input.caretAt) * 2.2) % 2 === 0) {
         // caret where the next letter goes (or at the start, over the placeholder)
         let li = 0, col = 0;
         if (bb.text) ({ li, col } = caretAt(bb.lines, bb.input.caret ?? bb.text.length));
         if (col >= bb.cols) col = bb.cols - 1;
         const cy = (li - s0) * lh;
-        if (cy > -1 && cy < ih) { tctx.fillStyle = css(HOT); tctx.fillRect(col * cw + 0.5, cy + lh * 0.15, Math.max(1.5, t * 0.8), lh * 0.7); }
+        if (cy > -1 && cy < ih) html += `<div style="position:absolute;left:${Math.round(col * cw)}px;top:${Math.round(cy + lh * 0.15)}px;width:2px;height:${Math.round(lh * 0.7)}px;background:${css(HOT)}"></div>`;
       }
-      // Clip to the frame as it is this instant: it may still be growing, or shrinking away on close.
+      // Clipped to the frame as it is this instant: it may still be growing, or shrinking away on close.
       const cx1 = fr.x + fr.w - padX(bb) + 2, cy1 = fr.y + fr.h - padY(bb) - (bb.input?.listen ? (METER + 1) * P : 0) - footH(bb) + 2;
       const cwid = Math.min(iw + t, cx1 - ix), chgt = Math.min(ih + t, cy1 - iy);
       if (cwid <= t || chgt <= t) return;
-      ctx.save();
-      ctx.beginPath(); ctx.rect(ix, iy, cwid, chgt); ctx.clip();
-      ctx.globalAlpha = fade;
-      ctx.drawImage(tcan, 0, 0, pw, phh, ix, iy, pw / dpr, phh / dpr);
-      ctx.restore();
+      TL.block(ctx, { x: ix, y: iy, w: cwid, h: chgt, alpha: fade, html: `<div style="color:${ink};letter-spacing:${ls}px;position:relative">${html}</div>`, font });
     };
 
     // ---- the task tag under the body: a spinner, what it's doing (dim) and what on (bright), then a tick or a cross ----
