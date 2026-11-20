@@ -527,6 +527,7 @@
     { k: `addkey:${p.id}`, aria: `${p.keySaved ? 'Change the' : 'Add a'} ${p.label} API key` });
 
   // Settings, one page per concern.
+  const PERSONA_TIPS = { look: 'Each look talks its own way.', butler: 'Calm and discreet. Reports what has been seen to.', sage: 'Teaches with questions and the idea behind the answer.', sassy: 'Cheeky and quick, never mean.' };
   const SIZE_TIPS = { default: 'My full size.', small: 'Half my size, so I take less of your screen.', cursor: 'I become a little arrow pointer, like your cursor.' };
   // The runnable models, one optgroup per signed-in provider, values 'provider:modelId'; `current` is the selected one ('' for none).
   const modelOptgroups = (current) => state.providers.filter((p) => p.on).map((p) => el('optgroup', { label: p.label },
@@ -710,10 +711,12 @@
         toggle('Its models can see images', 'Most servers don\'t say, so tell me.', a.images, () => { a.images = !a.images; render(`img:${ADD}`); }, `img:${ADD}`)) : null);
   }
   function appearancePage() {
-    const tabs = [['look', 'Look'], ['size', 'Size']], t = pageTab('appearance', tabs);
+    const tabs = [['look', 'Look'], ['persona', 'Personality'], ['size', 'Size']], t = pageTab('appearance', tabs);
     const head = el('div', { className: 'mhead' }, tabRow('Appearance', 'look-panel', tabs, t, (id) => { ui.tabs.appearance = id; }));
     return [head, tabPanel('look-panel', t, t === 'look'
       ? group(null, 'Each look has its own name and voice.', null, lookTiles())
+      : t === 'persona' ? group(null, 'How I talk, whatever I look like.', null,
+        picks('Personality', state.personalities ?? [], state.personality, (x) => act(`personality:${x}`), 'personality', PERSONA_TIPS))
       : group(null, 'How big I am on your screen.', null, picks('Size', state.sizes, state.size, (x) => act(`size:${x}`), 'size', SIZE_TIPS)))];
   }
   // The looks as live tiles: each one's character, playing, at the size picked below. Kept between renders (a state update mustn't restart

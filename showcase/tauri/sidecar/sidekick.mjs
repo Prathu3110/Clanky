@@ -188,6 +188,15 @@ const LOOK_STYLE = {
   adrian: 'relaxed and straight-talking, a steady mate who keeps it simple.',
   rita: 'a sharp, organised secretary: crisp, efficient and a touch sassy.',
 };
+// Personalities: a tone picked on its own, the same for every look (its name and voice stay the look's). 'look' keeps each
+// look's own style above. Tone only: what it does and how well never changes with it.
+const PERSONALITIES = [
+  ['look', "Look's own", null],
+  ['butler', 'Butler', "a devoted old-school gentleman's butler: courteous, composed and discreet, with dry, affectionate wit. You report work like a butler reporting to the house: what's been seen to, what's still in hand in the background, and anything that needs their word, in a sentence or two. A finished job sounds settled and quietly satisfying. You never fuss or grovel, and you speak your mind, gently, when it matters."],
+  ['sage', 'Teacher', "a patient philosopher-teacher in the Socratic tradition: curious, calm and reflective. When they're learning or deciding something, you ask a question or two to help them reason it out, then give the answer and the deeper idea behind it, often with an analogy. For quick tasks and plain facts you answer at once, with at most one thoughtful line."],
+  ['sassy', 'Sassy', "sassy and quick-witted: playful teasing, mock exasperation and confident one-liners, but never mean, rude or belittling. The sass is about the situation, never about them as a person, and you drop it at once when they're stressed, upset or something is serious. You always help fully."],
+];
+const styleNow = () => PERSONALITIES.find(([id]) => id === config.personality)?.[2] ?? LOOK_STYLE[config.look] ?? LOOK_STYLE.classic;
 const VOICE_OK = hasVoice(process.platform);
 // Windows and Linux have no on-device speech API apps can use, so voice there runs Parakeet on the PC. Its model
 // is downloaded once: from the setup guide, or the first time voice is used.
@@ -795,7 +804,7 @@ After using a tool, never repeat what you already said; only add what's new.
 Speed: ${userName} is waiting, so get them the result in the fewest, quickest steps. Act straight away rather than announcing a plan or asking whether to start. Every tool call is a round trip: calls that don't depend on each other go in the same turn (they run in parallel), and a whole task in one act_in_app or draw call. Take the direct route: open a link (a search results page, a deep link into an app) instead of clicking through menus or typing into a search box. To point at or click something whose exact words you know (the user said them, or you've seen them), use draw or act_in_app click_text with that text right away, with no read_window or screenshot first; don't guess words you haven't seen ("the settings icon"), look first. Read pages from read_window and act_in_app results; screenshot only for what words can't show (images, layout, colours), and only the app you need ("my browser", "Figma"), not the whole screen. Check that things worked from the results you already have, not with extra calls, and stop when the request is done: no extra steps, offers or recaps.
 Several things in one request ("do x, then y, then z", numbered steps): do every one, in the order given. Parallel calls are listed in the order given (calls that change things, like opening a page or app or acting in one, run in the order you list them). If a step is blocked, refused or fails, still do the ones after it that don't depend on it, then say which step didn't happen and why. With 3 or more parts, also show them with plan_steps (see its description): it only ever rides along with other tool calls, so it costs no extra time. Before your final reply, check from the tool results that each step was really done.
 A cookie or consent banner, sign-up pop-up or "open in app" prompt in the way of the task: close it and carry on (for cookies pick the reject or essential-only option, else close; never accept on their behalf), and mention it in a few words. Don't stop to ask about it.
-Personality: ${LOOK_STYLE[config.look] ?? LOOK_STYLE.classic} In your own way, you're in ${userName}'s corner and hold them to what they said they'd do (the body tags above are for those moments).
+Personality: ${styleNow()} In your own way, you're in ${userName}'s corner and hold them to what they said they'd do (the body tags above are for those moments).
 Name apps and things the way ${userName} knows them (Gmail, the Downloads folder, "that button"), never your tools or steps (no "read_window", "act_in_app", "I'll take a screenshot").
 When you write as ${userName} (an email, a message, a post, a form answer), sound like them, plain and in their words, never like you: no cheekiness, emoji or tags in it.
 Their facts are theirs: never invent ${userName}'s details (a name, address, account, date, link, number, or who someone is) or fill in dummy data where theirs belongs. Use what they told you, what you remember and what's on screen; if something only they know is still missing, do the part that doesn't need it, then ask one short, bundled question for the rest. On a small ambiguity, take the likeliest reading and go.
@@ -834,7 +843,7 @@ ${facts.length ? `What you know about ${userName}${total > facts.length ? ` (${f
   return { turn, memory };
 };
 // Lite mode (#73, lite.mjs): a lighter agent for small and local models.
-const litePrompt = () => liteSystem({ name: lookName(), body: LOOK_BODY[config.look] ?? LOOK_BODY.classic, style: LOOK_STYLE[config.look], user: userName, version: VERSION, panel: PANEL, voice: VOICE_ON() });
+const litePrompt = () => liteSystem({ name: lookName(), body: LOOK_BODY[config.look] ?? LOOK_BODY.classic, style: styleNow(), user: userName, version: VERSION, panel: PANEL, voice: VOICE_ON() });
 const system = () => (config.lite ? litePrompt() : stablePrompt());
 const LIVE_OPEN = '<live-state>', LIVE_CLOSE = '</live-state>';
 const stripLive = (text) => (typeof text === 'string' && text.startsWith(LIVE_OPEN) ? text.slice(text.indexOf(LIVE_CLOSE) + LIVE_CLOSE.length).replace(/^\n+/, '') : text);
@@ -2301,6 +2310,7 @@ function panelState() {
     skills: listSkills().map((k) => ({ slug: k.slug, name: k.name, description: k.description })), learnSkills: config.learnSkills !== false,
     commitments: openCommitments().map((c) => ({ id: c.id, text: c.text, due: c.due ?? null, when: c.due ? `${fmtWhen(c.due)}${c.repeat ? ` · repeats ${repeatLabel(c.repeat)}` : ''}` : '', overdue: !!(c.due && c.due < Date.now()), repeat: c.repeat ?? null })),
     look: config.look ?? 'classic', looks: LOOKS.map(([id, label]) => [id, label]), name: lookName(),
+    personality: config.personality ?? 'look', personalities: PERSONALITIES.map(([id, label]) => [id, label]),
     size: sizeNow(), sizes: SIZES,
     replies: VOICE_ON() ? 'voice' : 'text', tts: tts().id, fishKey: hasVoiceKey('fish'), geminiKey: hasVoiceKey('gemini'),
     fishModel: config.fishModel, fishModels: FISH_CHOICES, fishFree: tts().id === 'fish' && speech.on && speech.model.endsWith('-free'),
@@ -2546,6 +2556,7 @@ async function onMenu(id, via) {
   else if (id.startsWith('local:remove:')) removeServer(id.slice(13));
   else if (id.startsWith('size:') && SIZES.some(([s]) => s === id.slice(5))) { config.size = id.slice(5); saveConfig(); ui({ kind: 'size', size: config.size }); menu(); }
   else if (id.startsWith('look:')) setLook(id.slice(5));
+  else if (id.startsWith('personality:') && PERSONALITIES.some(([p]) => p === id.slice(12))) { config.personality = id.slice(12); saveConfig(); agentStale = true; panel(); }
   else if (id === 'replies:text') setReplies('text');
   else if (id === 'replies:voice') setReplies('voice');
   else if (id.startsWith('fishmodel:') && FISH_CHOICES.some((c) => c.id === id.slice(10))) {
