@@ -9,6 +9,10 @@
   const TAURI = window.__TAURI__?.core?.invoke;
   const invoke = TAURI ?? preview();
   const send = (msg) => invoke('sidecar_send', { msg }).catch(() => {});
+
+  // RENDERING.md §5 self-check (logged by the sidecar only with CLANKY_DEBUG=render): at start and on every scale change.
+  const renderCheck = () => Clanky.renderCheck && send({ type: 'render_check', ...Clanky.renderCheck('panel') });
+  setTimeout(renderCheck, 4000); Clanky.onDprChange?.(() => { setTimeout(renderCheck, 500); });
   const hide = () => invoke('panel_hide').catch(() => {});
   // An action from the menu's list. away: it happens on the desktop, so the panel steps aside first.
   const act = (id, away = false) => { if (away) hide(); send({ type: 'menu', id }); };
@@ -285,14 +289,20 @@
   const ZOOM = 0.5, UNIT = 340;
   function liveClanky(canvas, w, h, { persona = null, y = 0.56, form = 'default' } = {}) {
     if (!window.Clanky?.ditherKit) return null;
-    const dpr = Math.min(2, devicePixelRatio || 1);
-    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
-    canvas.style.width = `${w}px`; canvas.style.height = `${h}px`;
-    const ctx = canvas.getContext('2d');
+    const cssW = w, cssH = h, ctx = canvas.getContext('2d');
     const z = ZOOM, unit = UNIT;
+    let dpr = 1;
     w /= z; h /= z;
+    // Device pixels per drawing unit is dpr x zoom: that's what the ghost snaps to and picks its sheet by
+    // (RENDERING.md §2). Redone when the panel moves to a display with another scale.
+    const setup = () => {
+      dpr = Math.min(2, devicePixelRatio || 1);
+      canvas.width = Math.round(cssW * dpr); canvas.height = Math.round(cssH * dpr);
+      canvas.style.width = `${cssW}px`; canvas.style.height = `${cssH}px`;
+      env.dpr = dpr * z;
+    };
     const env = {
-      w, h, dpr, t: 0, unit, transparent: true, spawn: { x: w / 2, y: h * y },
+      w, h, dpr: 1, t: 0, unit, transparent: true, spawn: { x: w / 2, y: h * y },
       safe: { left: 0, right: 0, top: 0, bottom: 0 }, mouse: { x: w / 2, y: h * y, inside: false, active: false }, sleepy: 0, reduced: REDUCED.matches,
     };
     let K = null, clock = 0, actUntil = 0;
@@ -318,6 +328,7 @@
         ctx.save(); me.kit.draw(ctx, env); ctx.restore();
       },
     };
+    setup(); Clanky.onDprChange(() => { if (!canvas.isConnected) return false; setup(); me.kit.resize(env); });
     me.kit.setGhost(persona); me.kit.setForm(form); me.kit.resize(env);
     me.kit.mover.anchor = { x: w / 2, y: h * y, r: 1.5 };
     me.kit.vanish(null, true);

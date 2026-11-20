@@ -7,11 +7,8 @@
   const base = new URL('ghost/', document.currentScript?.src ?? location.href);
   const PERSONA_GHOST = { classic: 'ivory', butler: 'cobalt', sage: 'green', sassy: 'pink' };
   const CURSOR_ROW = { ivory: 0, cobalt: 1, green: 2, pink: 3 };
-  // Slightly see-through, so it reads as a presence on the screen rather than a stamped logo.
-  const ALPHA = 0.9;
   const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)');
-  const ON_SCREEN = /\/desktop\.html$/.test(location.pathname);
 
   let man = null;
   const states = new Map();
@@ -25,9 +22,20 @@
     if (!im) { im = new Image(); im.src = new URL(file, base).href; sheets.set(file, im); }
     return im.complete && im.naturalWidth ? im : null;
   };
+  // design/RENDERING.md: on a 2x screen the 64 px ghost is 128 device px, so the 4x sheet is drawn 1:1 (nothing is
+  // resampled); 2x likewise. Other sizes scale the 1x sheet by a whole number, smoothing off.
+  const PRESCALED = [2, 4];
+  const file = (name, s) => (s === 1 ? `${name}.png` : `${s}x/${name}@${s}x.png`);
+  const best = (name, n) => {
+    if (PRESCALED.includes(n)) { const im = sheet(file(name, n)); if (im) return [im, n]; }
+    const im = sheet(file(name, 1));
+    return im ? [im, 1] : null;
+  };
   // Load every sheet up front, so a personality or appearance switch never shows a blank frame.
-  for (const g of Object.keys(CURSOR_ROW)) for (const v of ['light', 'dark']) sheet(`clanky-${g}-${v}.png`);
-  for (const v of ['light', 'dark']) sheet(`clanky-cursor-${v}.png`);
+  for (const s of [1, ...PRESCALED]) {
+    for (const g of Object.keys(CURSOR_ROW)) for (const v of ['light', 'dark']) sheet(file(`clanky-${g}-${v}`, s));
+    for (const v of ['light', 'dark']) sheet(file(`clanky-cursor-${v}`, s));
+  }
 
   const G = (R.ghost = {
     color: 'ivory',
@@ -35,9 +43,8 @@
     // The bubble's accent strip: the ghost's body colour; tangerine for Classic (its ivory would vanish on oat).
     accent: () => ({ ivory: '#F2A65A', cobalt: '#3468CE', green: '#30945F', pink: '#FF4F9A' })[G.color],
     setPersonality(p) { G.color = G.colorOf(p); },
-    // The dark sheets carry a dithered glow for a dark backdrop. On the overlay the backdrop is whatever app is
-    // underneath, where that glow reads as blur, so the overlay always uses the crisp light sheets (ink outline).
-    dark: () => !ON_SCREEN && darkMQ.matches,
+    // Light or dark sheet by the macOS appearance (design/DESIGN.md).
+    dark: () => darkMQ.matches,
     ready: () => !!man,
     // A state's per-frame times (ms), for the native follower to play the same loop; force pins a frame while it's captured.
     timing: (id) => (states.get(id) ?? states.get('idle'))?.ms ?? [500],
@@ -55,36 +62,40 @@
     draw(ctx, x, y, { state = 'idle', t = 0, scale = 2, reduced = false, show = 1, dpr = 1, dark = G.dark(), color = G.color } = {}) {
       const s = states.get(state) ?? states.get('idle');
       if (!s) return null;
-      const im = sheet(`clanky-${color}-${dark ? 'dark' : 'light'}.png`);
-      if (!im) return null;
-      const c = man.cell, f = G.frame(state, t, reduced);
-      const size = c * scale, X = Math.round((x - size / 2) * dpr) / dpr, Y = Math.round((y - size / 2) * dpr) / dpr;
-      blit(ctx, im, f * c, s.row * c, c, c, X, Y, size, show);
+      const name = `clanky-${color}-${dark ? 'dark' : 'light'}`, got = best(name, Math.round(scale * dpr));
+      if (!got) return null;
+      const c = man.cell, f = G.frame(state, t, reduced), size = c * scale;
+      // Whole device pixels: a part-pixel spot blurs pixel art even with smoothing off.
+      const X = Math.round((x - size / 2) * dpr) / dpr, Y = Math.round((y - size / 2) * dpr) / dpr;
+      blit(ctx, got[0], got[1], name, f * c, s.row * c, c, X, Y, size, show);
       return { x: X, y: Y, w: size, h: size, key: s.row * 8 + f };
     },
     // The cursor-size ghost with its top-left on the pointer's tip.
     cursor(ctx, x, y, { t = 0, reduced = false, show = 1, dpr = 1, color = G.color } = {}) {
       if (!man) return null;
-      const im = sheet(G.dark() ? man.cursor.sheet_dark : man.cursor.sheet_light);
-      if (!im) return null;
-      const c = man.cursor.cell, sc = man.cursor.scale, f = reduced ? 0 : Math.floor((t * 1000) / man.cursor.ms) % man.cursor.frames;
+      const name = `clanky-cursor-${G.dark() ? 'dark' : 'light'}`, sc = man.cursor.scale, got = best(name, Math.round(sc * dpr));
+      if (!got) return null;
+      const c = man.cursor.cell, f = reduced ? 0 : Math.floor((t * 1000) / man.cursor.ms) % man.cursor.frames;
       const X = Math.round(x * dpr) / dpr, Y = Math.round(y * dpr) / dpr;
-      blit(ctx, im, f * c, CURSOR_ROW[color] * c, c, c, X, Y, c * sc, show);
+      blit(ctx, got[0], got[1], name, f * c, CURSOR_ROW[color] * c, c, X, Y, c * sc, show);
       return { x: X, y: Y, w: c * sc, h: c * sc, key: 200 + f };
     },
   });
 
-  // One cell, crisp, slightly see-through; through a Bayer 4x4 threshold (per sprite pixel) while it dithers in or out.
+  // One cell (sx, sy, c: in 1x sprite pixels; im is the sheet at scale s), crisp. While it dithers in or out it goes
+  // through a Bayer 4x4 threshold per sprite pixel, cut from the 1x sheet.
   const tmp = document.createElement('canvas'), tctx = tmp.getContext('2d', { willReadFrequently: true });
-  function blit(ctx, im, sx, sy, sw, sh, X, Y, size, show) {
+  function blit(ctx, im, s, name, sx, sy, c, X, Y, size, show) {
     if (show <= 0) return;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    ctx.globalAlpha *= ALPHA;
-    if (show >= 1) ctx.drawImage(im, sx, sy, sw, sh, X, Y, size, size);
+    if (show >= 1) ctx.drawImage(im, sx * s, sy * s, c * s, c * s, X, Y, size, size);
     else {
+      const base = sheet(file(name, 1));
+      if (!base) { ctx.restore(); return; }
+      const sw = c, sh = c;
       tmp.width = sw; tmp.height = sh;
-      tctx.clearRect(0, 0, sw, sh); tctx.drawImage(im, sx, sy, sw, sh, 0, 0, sw, sh);
+      tctx.clearRect(0, 0, sw, sh); tctx.drawImage(base, sx, sy, sw, sh, 0, 0, sw, sh);
       const d = tctx.getImageData(0, 0, sw, sh), a = d.data, cut = show * 16;
       for (let py = 0; py < sh; py++) for (let px = 0; px < sw; px++) if (BAYER[(py & 3) * 4 + (px & 3)] >= cut) a[(py * sw + px) * 4 + 3] = 0;
       tctx.putImageData(d, 0, 0);

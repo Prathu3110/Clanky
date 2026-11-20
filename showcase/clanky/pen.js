@@ -22,6 +22,7 @@
     ctx = cv.getContext('2d');
     const fit = () => { const d = devicePixelRatio || 1; cv.width = Math.round(innerWidth * d); cv.height = Math.round(innerHeight * d); paint(); };
     addEventListener('resize', fit);
+    R.onDprChange(fit);
     fit();
   }
 

@@ -10,6 +10,10 @@
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const invoke = window.__TAURI__?.core?.invoke ?? preview();
   const send = (msg) => invoke('sidecar_send', { msg }).catch(() => {});
+
+  // RENDERING.md §5 self-check (logged by the sidecar only with CLANKY_DEBUG=render): at start and on every scale change.
+  const renderCheck = () => Clanky.renderCheck && send({ type: 'render_check', ...Clanky.renderCheck('guide') });
+  setTimeout(renderCheck, 4000); Clanky.onDprChange?.(() => { setTimeout(renderCheck, 500); });
   const sfx = (name, arg) => Clanky.sfx?.play(name, arg);
 
   // ---------------------------------------------------------------- the Sidekick
@@ -115,6 +119,7 @@
     sidekick.resize(env);
   }
   addEventListener('resize', resize);
+  Clanky.onDprChange(resize);
   addEventListener('pointermove', (e) => { Object.assign(env.mouse, { x: e.clientX, y: e.clientY, inside: true, active: true }); }, { passive: true });
   document.addEventListener('mouseleave', () => { env.mouse.active = false; });
   resize();

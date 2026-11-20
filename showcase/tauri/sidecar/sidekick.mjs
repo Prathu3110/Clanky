@@ -2866,6 +2866,8 @@ createInterface({ input: process.stdin }).on('line', (line) => {
   if (m.type === 'menu') onMenu(m.id, m.via).catch((e) => console.error('menu', e));
   else if (m.type === 'panel_open') { panelOpen = true; panelAt = Date.now(); logLine('panel_open', {}); if (VOICE_OK) send({ type: 'voice_mics' }); Promise.all([refreshAuth(), signedIn.get('local') && syncLocal(), tts().local && speech.checkLocal()]).catch(() => {}).finally(() => { panel(); refreshCatalogs(); }); }
   else if (m.type === 'diagnostics') { shellInfo?.(m); shellInfo = null; }
+  // RENDERING.md §5 self-check from a page (dev only: CLANKY_DEBUG=render): its dpr and each canvas's backing width.
+  else if (m.type === 'render_check' && /\brender\b/.test(process.env.CLANKY_DEBUG ?? '')) logLine('render_check', { page: String(m.page).slice(0, 20), dpr: Number(m.dpr), canvases: (Array.isArray(m.canvases) ? m.canvases : []).slice(0, 40).map((c) => ({ id: String(c?.id).slice(0, 40), width: Number(c?.width), clientWidth: Number(c?.clientWidth), ok: !!c?.ok })) });
   else if (m.type === 'panel_closed') { panelOpen = false; logLine('panel_closed', { why: String(m.why ?? ''), ms: Date.now() - panelAt }); }
   else if (m.type === 'panel_key' && typeof m.provider === 'string' && typeof m.key === 'string') {
     const id = typeof m.kind === 'string' ? m.kind : m.provider;

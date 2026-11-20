@@ -128,10 +128,14 @@
   function allocate() {
     W = innerWidth; H = innerHeight; DPR = Math.min(2, devicePixelRatio || 1);
     for (const c of [view, litC]) { c.width = Math.round(W * DPR); c.height = Math.round(H * DPR); }
+    // Sizing resets each context: smoothing off again (RENDERING.md §1), so pixel art and dithers stay crisp.
+    for (const c of [V, Lc]) c.imageSmoothingEnabled = false;
     alloc = true; view.style.visibility = ''; lastU = null;
   }
   const freeCanvas = () => { for (const c of [view, litC]) { c.width = c.height = 1; } alloc = false; view.style.visibility = 'hidden'; lastU = null; };
-  addEventListener('resize', () => { W = innerWidth; H = innerHeight; if (alloc) { allocate(); touch(); } });
+  const realloc = () => { W = innerWidth; H = innerHeight; if (alloc) { allocate(); touch(); } };
+  addEventListener('resize', realloc);
+  R.onDprChange(realloc);
 
   const marks = [];
   let raf = 0, until = 0, lastU = null;

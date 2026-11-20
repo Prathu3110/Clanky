@@ -523,7 +523,7 @@
   // Top right of the screen this overlay is on, inside its safe area; again when it moves to another screen.
   const place = () => {
     const [x, y] = R.agentHomePlace([col.offsetWidth || 300, col.offsetHeight], R.safe, [innerWidth, innerHeight]);
-    col.style.transform = `translate(${x}px, ${y}px)`;
+    col.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`; // whole px: no resampled text
     // A short screen: the oldest shelves go rather than running off its bottom.
     const room = innerHeight - (R.safe?.bottom ?? 0) - INSET - y;
     while (shelves.length > 1 && col.offsetHeight > room) { const s = shelves.pop(); s.el.remove(); }
