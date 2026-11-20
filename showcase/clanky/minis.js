@@ -24,7 +24,7 @@
   };
 
   // ---------- pixel-art file icons: 12x12 grids in the design tokens' ink, oat and tangerine ----------
-  const INK = { k: '#2A2420', d: '#5E5248', m: '#C9BDAD', a: '#F2A65A', h: '#FFFFFF' };
+  const INK = { k: '#2a2420', d: '#5e5248', m: '#c9bdad', a: '#f2a65a', h: '#ffffff' };
   const blank = () => Array.from({ length: 12 }, () => Array(12).fill('.'));
   const put = (g, cells, ch) => { for (const [r, c] of cells) if (g[r]?.[c] != null) g[r][c] = ch; };
   const row = (g, r, c0, c1, ch) => { for (let c = c0; c <= c1; c++) g[r][c] = ch; };
