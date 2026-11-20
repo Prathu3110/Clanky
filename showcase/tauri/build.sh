@@ -18,6 +18,11 @@ TRIPLE="${TARGET:-$(rustc -vV | sed -n 's/^host: //p')}"
 case "$TRIPLE" in
   *-windows-*)
     mkdir -p src-tauri/binaries
+    # ONNX Runtime in the voice helper needs the Visual C++ runtime, which a fresh Windows can lack (#121): it's
+    # installed beside the helpers (app-local, as Microsoft allows), copied from this build machine.
+    mkdir -p src-tauri/vcruntime
+    sys32="$(cygpath -u "${SYSTEMROOT:-C:\\Windows}")/System32"
+    for dll in msvcp140.dll msvcp140_1.dll vcruntime140.dll vcruntime140_1.dll; do cp "$sys32/$dll" src-tauri/vcruntime/; done
     for h in voice hands; do
       cargo build --release --locked --manifest-path "src-tauri/$h-win/Cargo.toml" --target "$TRIPLE"
       cp "src-tauri/$h-win/target/$TRIPLE/release/clanky-$h.exe" "src-tauri/binaries/clanky-$h-$TRIPLE.exe"

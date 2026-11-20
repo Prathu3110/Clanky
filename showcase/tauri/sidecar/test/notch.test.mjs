@@ -121,4 +121,97 @@ R.notch.close(); flush(); frames();
   R.notch.close(); flush(); frames(); R.notch.text('a new reply'); frames();
   assert.equal(t.scrollTop, 1000, 'a new reply starts at its newest line');
 }
+// Regression: on the capsule the Allow buttons sometimes vanished while the question still waited. A turn that ended
+// (or a line said) under the prompt started it lingering, and the next status (a tool, thinking) then wiped the card.
+R.notch.close(); flush(); frames();
+{
+  const choices = capsule.querySelector('.nc-choices');
+  let chose = -1;
+  R.notch.think();
+  const h = R.notch.prompt('Open Notepad?', ['Allow', "Don't allow"], (i) => { chose = i; });
+  R.notch.done();
+  R.notch.tool('Searching');
+  R.notch.think();
+  R.notch.text('More words.');
+  R.notch.say('A reminder.');
+  frames();
+  assert.equal(choices.hidden, false, 'the Allow buttons stay while the question waits');
+  assert.equal(R.notchHit(100, 20), true, 'and still take clicks');
+  assert.equal(capsule.dataset.mode, 'ask', 'it still says it needs an OK');
+  assert.match(capsule.querySelector('.nc-text').children.map((c) => c.textContent).join('\n'), /^Open Notepad\?$/, 'the question stays as asked');
+  h.close();
+  assert.equal(choices.hidden, true, 'answered, they go');
+  assert.match(capsule.querySelector('.nc-text').children.map((c) => c.textContent).join('\n'), /More words\./, 'the words that came meanwhile show after');
+}
+// Rating a reply: Good / Wrong under a rated reply only, never during an Allow question, and gone with a new turn.
+R.notch.close(); flush(); frames();
+{
+  const rate = capsule.querySelector('.nc-rate'), choices = capsule.querySelector('.nc-choices');
+  const said = [];
+  R.notch.think(); R.notch.text('Exported 3 frames.'); R.notch.done({ rate: (good) => said.push(good) });
+  assert.equal(rate.hidden, false, 'a rated reply shows Good and Wrong');
+  assert.deepEqual(rate.children.map((b) => b.textContent), ['Good', 'Wrong']);
+  assert.notEqual(choices.hidden, false, 'not the Allow buttons');
+  assert.equal(R.notchHit(100, 20), true, 'they take clicks');
+  rate.children[1].fire('click');
+  assert.deepEqual(said, [false], 'Wrong sends once');
+  assert.equal(rate.hidden, true, 'and the buttons go');
+  R.notch.begin();
+  R.notch.text('Done.'); R.notch.done();
+  assert.equal(rate.hidden, true, 'a reply that is not rated has none');
+  R.notch.begin(); R.notch.text('Done again.'); R.notch.done({ rate: (good) => said.push(good) });
+  rate.children[0].fire('click');
+  assert.deepEqual(said, [false, true], 'Good sends');
+  assert.match(rate.children.map((c) => c.textContent).join(''), /Thanks/, 'and says thanks');
+  R.notch.begin(); R.notch.text('More.'); R.notch.done({ rate: noop });
+  R.notch.think();
+  assert.equal(rate.hidden, true, 'a new turn clears them');
+  R.notch.text('Opening it.');
+  const h = R.notch.prompt('Open Notepad?', ['Allow', "Don't allow"], noop);
+  R.notch.done({ rate: noop });
+  assert.equal(rate.hidden, true, 'never while an Allow question waits');
+  h.close();
+  R.notch.close(); flush(); frames();
+  R.notch.text('Hi.'); R.notch.done({ rate: noop });
+  R.notch.prompt('Run it?', ['Allow', "Don't allow"], noop);
+  assert.equal(rate.hidden, true, 'an Allow question hides them');
+  R.notch.fail('stopped');
+  assert.equal(rate.hidden, true);
+}
+// Launch and summon with the capsule on: it says hi itself (the Clanky no longer pops out by the cursor), and never
+// over a reply or a question already in it.
+R.notch.close(); flush(); frames();
+{
+  const label = capsule.querySelector('.nc-label');
+  assert.equal(R.notch.hello(), true, 'it comes out');
+  assert.equal(R.notch.active, true);
+  assert.equal(capsule.dataset.mode, 'done');
+  assert.equal(label.textContent, 'Hi there');
+  assert.equal(R.notchHit(100, 20), false, 'nothing to click: clicks go to the app below');
+  R.notch.close(); flush(); frames();
+  R.notch.text('A reply.'); R.notch.done();
+  assert.equal(R.notch.hello(), false, 'a reply on show stays');
+  assert.match(capsule.querySelector('.nc-text').children.map((c) => c.textContent).join(''), /A reply\./);
+  R.notch.close(); flush(); frames();
+  R.notch.think();
+  assert.equal(R.notch.hello(), false, 'thinking stays');
+  R.notch.close(); flush(); frames();
+  R.notch.prompt('Open Notepad?', ['Allow', "Don't allow"], noop);
+  assert.equal(R.notch.hello(), false, 'a question stays');
+  R.notch.close(); flush(); frames();
+}
+// Regression: the hello at launch stayed up for good. The notch style arrives just after it, and the capsule came back
+// in the new style without its timer.
+{
+  R.notchHit(900, 20); // the cursor is away from it (resting on it keeps it up)
+  R.notch.style = 'drop'; // the pill until the notched screen is known
+  assert.equal(R.notch.style, 'drop');
+  R.notch.hello();
+  R.notch.style = 'spread';
+  flush();
+  assert.equal(R.notch.active, true, 'back out in the new style');
+  await new Promise((r) => setTimeout(r, 2800));
+  for (let i = 0; i < 3; i++) rafs.splice(0).forEach((f) => f(performance.now()));
+  assert.equal(R.notch.active, false, 'and it still folds away');
+}
 console.log('notch tests: passed');

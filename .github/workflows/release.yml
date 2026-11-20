@@ -165,7 +165,7 @@ jobs:
           if (-not $app) { throw 'clanky.exe is not where the installer puts it' }
           $dir = $app.DirectoryName
           "Installed in $dir"
-          $missing = @('clanky-node.exe', 'clanky-voice.exe', 'clanky-hands.exe', 'sidecar/sidekick.mjs') | Where-Object { -not (Test-Path (Join-Path $dir $_)) }
+          $missing = @('clanky-node.exe', 'clanky-voice.exe', 'clanky-hands.exe', 'sidecar/sidekick.mjs', 'msvcp140.dll', 'msvcp140_1.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') | Where-Object { -not (Test-Path (Join-Path $dir $_)) }
           if ($missing) { throw "The installed app is missing: $($missing -join ', ')" }
           & (Join-Path $dir 'clanky-hands.exe') --self-test
           if ($LASTEXITCODE) { throw "The installed hands helper failed its self-test ($LASTEXITCODE)" }

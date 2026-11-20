@@ -853,10 +853,10 @@
           hand.took = true;
           if (!pen.held) await api.pen.take('hand');
         } else if (hand.want && hand.next && handHolds()) {
-          const [x, y] = hand.next;
+          const [x, y, tap] = hand.next;
           hand.next = null;
           await api.pen.jump(x, y);
-          if (handHolds()) await api.pen.tap(x, y);
+          if (tap && handHolds()) await api.pen.tap(x, y);
         } else if (!hand.want && handHolds()) {
           const [hx, hy] = penHome(), [ox, oy] = tipOff();
           await api.pen.jump(hx - ox, hy - oy);
@@ -966,10 +966,11 @@
         },
       },
       // Its work in another app: begin() when a step lands somewhere or takes the real cursor, at() for each spot
-      // (overlay px), end() when the work is over (resolves once it is back to its own size beside the cursor).
+      // (overlay px; tap: false for a hover, which a tap would make look like a click), end() when the work is over
+      // (resolves once it is back to its own size beside the cursor).
       hand: {
         begin() { if (!hand.want) { hand.want = true; handKick(); } },
-        at(x, y) { if (hand.want) { hand.next = [x, y]; handKick(); } },
+        at(x, y, { tap = true } = {}) { if (hand.want) { hand.next = [x, y, tap]; handKick(); } },
         end() { hand.want = false; hand.took = false; hand.next = null; return handKick(); },
       },
       // Make (x, y) home and move there now, e.g. to restore where the user last left it.

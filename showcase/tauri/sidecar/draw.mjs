@@ -7,7 +7,7 @@ import { checkUrl } from './safety.mjs';
 import { COUNTRIES } from './countries.mjs';
 
 export const LIMITS = { beats: 12, marks: 40, points: 200, parts3d: 40, atoms: 120, photoBytes: 800_000, iconBytes: 64_000,
-  nodes: 16, links: 24, columns: 6, rows: 12, bars: 12, labels: 8, pins: 12, shade: 40, routes: 8, steps: 10, tex: 300, vertices: 16, questions: 6, cardsShown: 4 };
+  nodes: 16, links: 24, columns: 6, rows: 12, bars: 12, labels: 8, pins: 12, shade: 40, routes: 8, steps: 10, tex: 300, vertices: 16, questions: 6, cardsShown: 8 };
 export const TONES = ['accent', 'teal', 'amber', 'coral', 'lilac', 'sky', 'lime', 'red', 'white'];
 // Marks on the real screen (they need a place on it), actions in apps, and cards drawn on calm space.
 export const SCREEN = ['point', 'target', 'hover', 'ring', 'frame', 'underline', 'strike', 'check', 'cross', 'connect', 'trace', 'num', 'label', 'write', 'scroll', 'spotlight', 'highlight', 'line', 'curve', 'arrow', 'circle', 'rect'];
@@ -94,15 +94,18 @@ function tidyBeat(b) {
     if (!marks.length && extra.kind) marks = [extra];
     else if (marks.length === 1 && isObj(marks[0]) && (!extra.kind || extra.kind === marks[0].kind)) marks = [{ ...extra, ...marks[0] }];
   }
-  return { ...b, marks: Array.isArray(marks) ? marks.map(tidyMark) : marks };
+  // No line to say (#117): it draws without a caption instead of the whole drawing failing.
+  return { ...b, say: typeof b.say === 'string' ? b.say : '', marks: Array.isArray(marks) ? marks.map(tidyMark) : marks };
 }
 export function tidyDraw(a) {
   if (!isObj(a) || !Array.isArray(a.beats)) return a;
   const extra = loose(a, CALL_KEYS);
-  const beats = Object.keys(extra).length && a.beats.length === 1 && isObj(a.beats[0]) ? [{ ...extra, ...a.beats[0] }] : a.beats;
+  let beats = Object.keys(extra).length && a.beats.length === 1 && isObj(a.beats[0]) ? [{ ...extra, ...a.beats[0] }] : a.beats;
+  // The line on the call instead of its first beat.
+  if (typeof a.say === 'string' && isObj(beats[0]) && typeof beats[0].say !== 'string') beats = [{ ...beats[0], say: a.say }, ...beats.slice(1)];
   return { ...a, beats: beats.map(tidyBeat) };
 }
-const Beat = z.object({ say: z.string().min(1).max(240), marks: z.array(Mark).max(LIMITS.marks), wait: z.enum(['click', 'hover']).optional() });
+const Beat = z.object({ say: z.string().max(240), marks: z.array(Mark).max(LIMITS.marks), wait: z.enum(['click', 'hover']).optional() });
 const Edit = z.object({ do: z.enum(['recolor', 'move', 'erase', 'clear']), part: z.string().max(8).optional(), tone: z.enum(TONES).optional(), dx: num.optional(), dy: num.optional() });
 export const DrawArgs = z.preprocess(tidyDraw, z.object({
   target: z.string().optional(),
@@ -118,6 +121,7 @@ export function checkDraw(args) {
   const out = [], beats = args.beats ?? [], edits = args.edit ?? [];
   if (!beats.length && !edits.length) out.push('Give beats to draw, or edit to change what is drawn.');
   beats.forEach((b, i) => {
+    if (!b.say.trim() && !b.marks.length) out.push(`beat ${i + 1}: needs say or marks.`);
     b.marks.forEach((m, j) => {
       const where = `beat ${i + 1} mark ${j + 1} (${m.kind})`, need = (ok, what) => { if (!ok) out.push(`${where}: needs ${what}.`); };
       if (PATHS.has(m.kind)) need(m.points?.length >= 2 || hasAt(m.at), 'points ([x, y] screenshot pixels, at least 2) or at');

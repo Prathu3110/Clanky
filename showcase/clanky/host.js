@@ -408,7 +408,8 @@
         if (research) panel()?.end(fromWeb ? 'From the web' : 'Answer');
         research = waveTurn = false;
         endTalk();
-        if (notchOn()) N().done({ speech: e.speech });
+        // A request that did something can be rated: Good or Wrong under the reply (the sidecar learns from it).
+        if (notchOn()) N().done({ speech: e.speech, ...(e.rate ? { rate: (good) => send({ type: 'feedback', good }) } : {}) });
         if (e.listen) waitThenListen(e.listen);
         reportSaid(e.speech);
         break;
@@ -473,10 +474,10 @@
       Clanky.sfx?.play('heard');
     } else if (m.type === 'state' && m.state === 'idle') {
       // Nothing was heard (or it was cancelled): no answer is coming for that talk.
-      if (m.cancelled || !heardText) { waveTurn = false; if (notchOn() && !responding) N().close(); }
+      if (m.cancelled || !heardText) { waveTurn = false; if (notchOn() && !responding && !ask) N().close(); }
       // Heard, but no turn ever started (or it never ended): don't leave 'Thinking' up for good.
       // Only for this take: a newer one (talking again within the 20 s) keeps its capsule.
-      else if (notchOn()) { const take = listenTake; setTimeout(() => { if (take === listenTake && !responding && Clanky.notch?.active) N().close(); }, 20000); }
+      else if (notchOn()) { const take = listenTake; setTimeout(() => { if (take === listenTake && !responding && !ask && Clanky.notch?.active) N().close(); }, 20000); }
       heardText = false;
       listen?.close(); listen = null;
       if (heard) { const h = heard; setTimeout(() => { if (heard === h) { h.close(); heard = null; } }, 4000); }
@@ -507,6 +508,7 @@
   window.__clankyHost = (m) => {
     Clanky.wake?.(); // the frame loop naps while the sidekick is hidden
     if (m.kind === 'speech') { Clanky.voiceOut?.handle(m); return; } // plays on, even while it changes screens
+    if (m.kind === 'volume') { Clanky.voiceOut?.setVolume(m.v); if (Clanky.sfx) Clanky.sfx.volume = m.v; return; }
     if (held) { held.q.push(m); return; }
     if (m.kind === 'notch') { if (Clanky.notch) { Clanky.notch.enabled = !!m.on; if (m.style) Clanky.notch.style = m.style; if (!m.on) Clanky.notch.close(); } return; }
     if (m.kind === 'sound') { if (Clanky.sfx) Clanky.sfx.enabled = m.on; return; }
@@ -531,16 +533,25 @@
       if (m.step) {
         const [x, y, w, h] = m.step.bounds, o = Clanky.origin ?? { x: 0, y: 0 }, px = x + w / 2 - o.x, py = y + h / 2 - o.y;
         // A spot on another display isn't this overlay's to show.
-        if (px >= 0 && py >= 0 && px <= innerWidth && py <= innerHeight) { hand?.begin(); hand?.at(px, py); }
+        if (px >= 0 && py >= 0 && px <= innerWidth && py <= innerHeight) { hand?.begin(); hand?.at(px, py, { tap: !m.step.hover }); }
       } else if (m.borrow) hand?.begin();
       else { handsBusy = !!m.on; if (handsBusy) setHot(false); else hand?.end(); }
       return;
     }
-    if (m.kind === 'greet') { getAgent().act('wave'); return; }
+    // Launch (and the relaunch after an update): the capsule says hi when it's on, else the Clanky waves by the cursor.
+    if (m.kind === 'greet') { if (notchOn()) N().hello(); else getAgent().act('wave'); return; }
     if (m.kind === 'intro') { if (capR()) N().say(m.text); else getAgent().intro(m.x, m.text); return; }
     if (m.kind === 'esc') { onEsc(); return; }
     if (m.kind === 'summon') {
-      // ⌃⌥S toggles; the menu's Show Sidekick only ever shows.
+      // ⌃⌥S toggles; the menu's Show Sidekick only ever shows. With the capsule on, it's the capsule that comes out.
+      if (notchOn()) {
+        if (!N().active) N().hello();
+        else if (!m.show) {
+          if (responding || Clanky.voiceOut?.playing()) { send({ type: 'menu', id: 'stop', via: 'hide' }); Clanky.voiceOut?.stop(); }
+          N().close();
+        }
+        return;
+      }
       const a = getAgent();
       if (m.show || !a.visible) { if (a.show({ summoned: true })) a.act('wave'); }
       else {

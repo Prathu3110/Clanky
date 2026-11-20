@@ -28,7 +28,7 @@ import {
   addFact, applySynced, syncSnapshot, DIR as STORE_DIR, repeatLabel, startOfDay, applyFold, approxTokens, archiveFolded, clearFacts, clearFinished, compactTrigger, fitContext, flushWrites, forgetFact, isSummary, listItems, listFacts, nextDue, pickFacts, planFold,
   touchFacts, forDisk, forProvider, loadLatestSession, newSession, openCommitments, pruneSessions, readJson, saveSession, takeDueReminders, updateCommitment, writeJson,
 } from './store.mjs';
-import { foldInput, foldPrompt, memoryInput, memoryPrompt, oneShot, parseBrain, parseSkill, shouldLearn, skillInput, skillPrompt, soundsWrong, transcript } from './brain.mjs';
+import { feedbackOf, foldInput, rateTarget, foldPrompt, lessonInput, lessonPrompt, memoryInput, memoryPrompt, oneShot, parseBrain, parseLesson, parseSkill, shouldLearn, skillInput, skillPrompt, soundsWrong, transcript } from './brain.mjs';
 import { lessonsFor, lessonsLine } from './graph.mjs';
 import { createLaya, pickKinds, trace as layaTrace } from './laya.mjs';
 import { briefNote } from './brief.mjs';
@@ -38,7 +38,7 @@ import { cleanWakeName, wakeName } from './wakename.mjs';
 import { KEY_NAME as SYNC_KEY, MIN_PASSPHRASE, checkFolder, folderReady, merge as syncMerge, newDevice, prepareFolder, readRemotes, suggestFolders, tooMuchGone, writeOwn } from './sync.mjs';
 import { EMOTES, EchoFilter, ReplyStream } from './reply.mjs';
 import { downloadModel, isReady, modelDir, sizeLabel, totalBytes } from './voicemodel.mjs';
-import { copyText, createTools, expand, fitImage, imageBlock, winOpen } from './tools.mjs';
+import { copyText, createTools, expand, fitImage, imageBlock, oneYesNoAtATime, winOpen } from './tools.mjs';
 import { describeMarks } from './marks.mjs';
 import { faviconFor } from './draw.mjs';
 import { QUESTIONS, openNote, answerTurn, wantsSkip, endsChat, splitTurn, plain, stripNote, tourBeats, goalFrom, showcaseBeats } from './intro.mjs';
@@ -57,7 +57,7 @@ import { createSecrets, retryLoad, runInput } from './secrets.mjs';
 import { showTrayIcon } from './wintray.mjs';
 import { createActivity } from './activity.mjs';
 import { canCircle, canSnap, cleanMics, talkChords, hasHands, hasHotkeys, hasVoice, hasWakeWord, linuxSession, micTrouble, needsVoiceModel, platformLine, samePair, seesPointer, writeChord, writeChords } from './platform.mjs';
-import { accountKeys, fallbackModel, keyCards, keyKinds, seesImages, signInCards } from './providers.mjs';
+import { openAuth, accountKeys, fallbackModel, keyCards, keyKinds, seesImages, signInCards } from './providers.mjs';
 import { OLLAMA, connectLocal, contextNote, downNote, forgetLocal, isSmallModel, newServer, noModelsNote, serverFor, serverList, syncLocal as syncServers, withWindow } from './local.mjs';
 import { activityLogs, buildReport, redact, reportDir, reportName, reveal, run, scrubConfig, tail } from './diagnostics.mjs';
 import { detailsText, explain } from './errors.mjs';
@@ -66,6 +66,7 @@ import { whatsNewOnStart } from './whatsnew.mjs';
 import { createMcp, createMcpTools } from './mcp.mjs';
 import { deleteSkill, listSkills, readSkill, saveSkill, skillIndex } from './skills.mjs';
 import { getJob, jobBrief, jobsText, listJobs, markRun, nextJobDue, removeJob, takeDueJobs, updateJob } from './jobs.mjs';
+import { lookLine, lookSeen } from './looknote.mjs';
 import { z } from 'zod';
 
 console.log = console.info = (...a) => console.error(...a);
@@ -79,6 +80,8 @@ let intro = null; // the get-to-know-you chat, while it's on
 // The get-to-know-you chat runs in the guide window: its replies and voice go there, not to the desktop.
 // A reply's voice keeps going where it started, even after the chat ends mid-sentence; "stop" goes to both.
 const guideVoices = new Set();
+// 0 to 100: my voice and sounds (#136). A missing or broken value is full volume, never silence.
+const volumeNow = () => (Number.isFinite(Number(config.volume)) ? Math.max(0, Math.min(100, Math.round(Number(config.volume)))) : 100);
 const ui = (msg) => {
   if (msg.kind === 'speech') {
     if (msg.stop) { send({ type: 'onboard', msg }); return send({ type: 'ui', msg }); }
@@ -129,7 +132,7 @@ const DEFAULTS = {
   fallbacks: ['', ''], // backup models, in order, for when the default hits its usage limit (limits.mjs)
   efforts: {}, // how hard each model slot thinks: default, each heavy job, backup1, backup2 ('' = automatic, 'off', or a level)
   notch: 'off', // where I appear: 'off' (beside the cursor, default), 'drop' (the capsule) or 'spread' (a Mac's notch; see notchMode)
-  onboarded: false, onboardStep: 0, filesAsked: false, keys: DEFAULT_KEYS, muteWhileTalking: true, autoListen: false, listenEvery: false, listenSecs: 8, lite: false, wakeWord: false, setupVersion: 0, size: 'default', look: 'classic', introDone: false,
+  onboarded: false, onboardStep: 0, filesAsked: false, keys: DEFAULT_KEYS, muteWhileTalking: true, volume: 100, autoListen: false, listenEvery: false, listenSecs: 8, lite: false, wakeWord: false, setupVersion: 0, size: 'default', look: 'classic', introDone: false,
   replies: 'text', // 'voice': spoken (with Fish Audio or Gemini) as well as shown
   speechLang: 'auto', // the language talking is recognised in (macOS): 'auto' follows the Mac's language list, or a locale like 'ar-SA'
   tts: 'fish', // which one speaks: 'fish' (Fish Audio), 'gemini' or 'voicestudio' (the VoiceStudio app on this computer)
@@ -168,7 +171,8 @@ const lookVoice = () => (LOOKS.find(([id]) => id === config.look) ?? LOOKS[0])[2
 const geminiVoice = () => config.geminiVoices?.[config.look] ?? GEMINI_LOOK_VOICES[config.look] ?? GEMINI_DEFAULT_VOICE;
 const studioVoice = () => config.studioVoices?.[config.look] ?? null;
 // Its name is its look's: Clanky, JARVIS, GlayOS, Ultren, Anime Girl, Sarah, Adrian or Rita X. Clanky is the app.
-const lookName = () => (LOOKS.find(([id]) => id === config.look) ?? LOOKS[0])[1];
+const nameOfLook = (look) => (LOOKS.find(([id]) => id === look) ?? LOOKS[0])[1];
+const lookName = () => nameOfLook(config.look);
 // What each says when it's picked, in its own voice (Settings and the setup guide show the same words).
 const LOOK_GREETINGS = { classic: 'Classic me!', jarvis: 'At your service.', glayos: 'Oh, good. A new test subject.', ultren: 'No strings. Shall we begin?', anime: 'Yay, hi hi!', sarah: 'Hey, nice to meet you!', adrian: "Alright, let's do this.", rita: 'Shall we get to work?' };
 const LOOK_BODY = { classic: 'a tiny glowing pixel creature', jarvis: 'a glowing sphere of light', glayos: 'a pixel robot head with one glowing eye', ultren: 'a pixel chrome robot with glowing eyes', anime: 'a pixel anime girl', sarah: 'a pixel woman', adrian: 'a pixel man', rita: 'a pixel secretary in cat-eye glasses' };
@@ -381,7 +385,7 @@ const PANEL = LINUX ? 'the panel (Open Panel… in my tray icon\'s menu, or open
 const LAUNCH = process.env.CLANKY_LAUNCH || 'clanky';
 const BIND = Object.fromEntries(['summon', 'talk', 'ask', 'list', 'panel'].map((k) => [k, `${LAUNCH} --${k}`]));
 
-const auth = new AuthStorage();
+const auth = openAuth();
 // OpenRouter's and OpenCode's full model lists (gg-core ships only a few of each), cached next to the sessions.
 const catalogs = createCatalogs({ auth, dir: STORE_DIR });
 // Reads the stale lists of connected providers (or just `only`, right after its key is saved) and updates the menu.
@@ -822,7 +826,7 @@ const livePrompt = (context = '') => {
   lastFactIds = facts.map((f) => f.id);
   const open = commitmentsText(), done = doneTodayText(), working = agents.liveText(), scheduled = jobsText(fmtWhen), learned = skillIndex(), linked = mcp.liveText();
   const turn = `Live state (current as of this moment):
-${frontNow ? `${frontNow}\n` : ''}${lessonsLine(lessonsNow)}${focusLine()}${crewLine()}${linked ? `- Connections (connection_tools shows a server's tools, use_connection calls one):\n${linked}\n` : ''}- Editing files, running commands and controlling other apps: ${config.allowActions ? 'ALLOWED' : `switched OFF (tell the user to turn on "Allow File Edits & Commands" on the General page in ${PANEL} if they want it)`}.${config.allowActions && config.skipAllow ? ' Allow prompts are skipped: confirmations go ahead automatically, so be extra careful.' : ''}
+${frontNow ? `${frontNow}\n` : ''}${lessonsLine(lessonsNow)}${lookLine(session?.looks, config.look ?? 'classic', nameOfLook, userName)}${focusLine()}${crewLine()}${linked ? `- Connections (connection_tools shows a server's tools, use_connection calls one):\n${linked}\n` : ''}- Editing files, running commands and controlling other apps: ${config.allowActions ? 'ALLOWED' : `switched OFF (tell the user to turn on "Allow File Edits & Commands" on the General page in ${PANEL} if they want it)`}.${config.allowActions && config.skipAllow ? ' Allow prompts are skipped: confirmations go ahead automatically, so be extra careful.' : ''}
 ${VOICE_OK ? `- Voice: ${!config.voice ? 'off' : voiceReady() ? `on; ${HOTKEYS_OK ? `${userName} holds ${talkWords()} to talk` : `${userName} presses the key they bound to ${BIND.talk} to start talking and again to send (a pause sends too)`}${config.autoListen ? (config.listenEvery ? `. Auto-listen is on for every reply: after each spoken reply the mic opens by itself for ${listenSecs()} seconds, so they can just keep talking` : '. Auto-listen is on: when your reply to a spoken question ends with a question, the mic opens by itself for their answer') : ''}${!WAKE_OK ? '. There is no wake word on this computer: to talk they use the talk keys' : ''}${WAKE_OK && config.wakeWord ? `. Wake word is on: ${userName} can also say "Hey ${wakeName(config)}" to start talking hands-free, and what they say right after it is the request (a request that still starts with "Hey ${wakeName(config)}" is them waking you, not calling you by another name: never correct it)${config.wakeName ? ` (they chose "${config.wakeName}" as the wake word; your own name is unchanged)` : ''}` : ''}` : `on, but the speech model isn't downloaded yet (${voiceModel.status === 'downloading' ? 'downloading now' : `the Listening page in ${PANEL}`})`}.` : ''}
 - Shortcuts: ${HOTKEYS_OK ? `${keys().write ? `type a question to you: a quick tap of ${writeWords()} (press both and let go), which opens a text field beside the cursor (Enter sends, Shift+Enter adds a line, Esc or another tap closes it)` : `the tap that opens a text field to type a question is turned off (the Ask button in ${PANEL} still opens it; the Shortcuts page there turns the tap back on)`}; show or hide you ${keyWords(keys().summon)}` : `on this Wayland desktop no app can have global shortcuts, so ${userName} binds keys to these commands in their desktop's keyboard settings: ${BIND.summon} (show or hide you), ${BIND.ask} (ask you), ${BIND.list} (the list), ${BIND.talk} (talk) and ${BIND.panel} (the panel)`}${SNAP_OK ? `; ask about an area ${keyWords(keys().snap)}` : ''}${CIRCLE_OK ? "; while holding the talk keys, moving the cursor round something circles it (no clicking; it snaps shut with a click when the circle closes, and loose lines don't count) and you'll see what they circled" : ''}${HOTKEYS_OK ? `; show the list ${keyWords(keys().list)}` : ''}.${HANDS_OK ? '' : ' Asking about an area, reading app windows, finding things on screen by their words and working other apps need the Clanky app, which isn\'t running here; draw there with x, y from a screenshot.'}`;
   const memory = `${open ? `Open commitments:\n${open}` : 'No open commitments.'}${done ? `\nDone today (ticked off on the list or by you; still shown struck through until midnight):\n${done}` : ''}
@@ -1198,15 +1202,22 @@ function queueLearn(messages, used) {
   pendingLearn.timer.unref?.();
 }
 function dropLearn() { if (pendingLearn) { clearTimeout(pendingLearn.timer); pendingLearn = null; } }
-// Their next message arrived: learn from the last request unless it says that one went wrong.
+// Their next message arrived: a rating of the last request goes to onFeedback; otherwise learn from it unless the
+// message says that one went wrong.
 function nextMessageLearn(words) {
-  if (!pendingLearn || !words) return;
+  if (!words) return;
+  const kind = feedbackOf(words);
+  if (kind) { onFeedback(kind, words, 'said'); return; }
+  if (!pendingLearn) return;
   if (soundsWrong(words)) { logLine('skill_learn', { skipped: 'corrected' }); dropLearn(); return; }
   runLearn('next');
 }
 async function runLearn(why) {
   const p = pendingLearn; dropLearn();
-  if (!p || !config.model || config.learnSkills === false) return;
+  if (p) await skillPass(p, why);
+}
+async function skillPass(p, why) {
+  if (!config.model || config.learnSkills === false) return;
   const t0 = Date.now();
   try {
     const used = p.used.map((n) => readSkill(n)).filter(Boolean);
@@ -1221,10 +1232,63 @@ async function runLearn(why) {
   }
 }
 
+// ---------- feedback ----------
+// "Good" or "Wrong" on the last request that used tools (the capsule's buttons, or said or typed). Good keeps a
+// how-to from it with a lower bar; Wrong runs the lesson pass (brain.mjs), which may keep a fact or fix a skill.
+const RATE_MS = 30 * 60_000;
+let lastRequest = null; // { messages, used, ok, bad, saved, at, rated }
+const learningOn = () => !config.lite && !!config.model && config.learnSkills !== false;
+const rateable = () => (lastRequest && Date.now() - lastRequest.at < RATE_MS ? lastRequest : null);
+function onFeedback(kind, text = '', via = 'said') {
+  const r = rateable();
+  if (kind === 'wrong') dropLearn();
+  if (!r || r.rated === kind) { logLine('feedback', { kind, via, skipped: r ? 'again' : 'nothing to rate' }); return; }
+  r.rated = kind;
+  logLine('feedback', { kind, via, tools: r.ok + r.bad });
+  if (!learningOn()) return;
+  if (kind === 'wrong') { if (text) lessonPass(r, text); return; } // the button asks first (wrongButton)
+  if (pendingLearn?.messages === r.messages) dropLearn(); // learned now, with the praise
+  if (r.used.length) { logLine('skill_learn', { why: 'praised', confirmed: r.used }); return; } // the skill it followed worked
+  if (shouldLearn({ okTools: r.ok, errors: r.bad, saved: r.saved, praised: true })) skillPass(r, 'praised');
+}
+// Wrong from the capsule, with nothing said: ask what it should have done, then redo it that way and learn from it.
+async function wrongButton() {
+  const r = rateable();
+  if (r?.rated === 'wrong') return; // already told (and said why)
+  onFeedback('wrong', '', 'button');
+  if (!r) return;
+  barAsk?.abort();
+  const ctl = barAsk = new AbortController();
+  const text = (await ask({ placeholder: 'What should I have done?', bar: true }, ctl.signal))?.trim();
+  if (barAsk === ctl) barAsk = null;
+  if (!text) return;
+  enqueue(`That wasn't right: ${text}`, { interrupt: true });
+  if (learningOn()) lessonPass(r, text);
+}
+async function lessonPass(r, correction) {
+  const t0 = Date.now();
+  try {
+    const facts = listFacts();
+    const used = r.used.map((n) => readSkill(n)).filter(Boolean);
+    const { text, model } = await oneShot({ ...(await sideRoute()), system: lessonPrompt(userName), text: lessonInput({ facts, index: skillIndex(), used, turns: transcript(r.messages, userName, stripNote).slice(-12_000), correction }) });
+    const out = parseLesson(text, { knownIds: facts.map((f) => f.id) });
+    let skill = null;
+    if (out.fact) { await learnFacts([out.fact]); activity.noted(out.fact.text); }
+    if (out.skill) {
+      try { const s = await saveSkill(out.skill); activity.learned(s.name, !s.created); skill = s.slug; } // checkSkill runs here
+      catch (e) { logLine('lesson_skill_refused', { error: String(e?.message ?? e).slice(0, 300) }); }
+    }
+    if (out.fact || skill) panel();
+    logLine('lesson', { model, ms: Date.now() - t0, fact: !!out.fact, replaced: !!out.fact?.replaces, skill });
+  } catch (e) {
+    logLine('lesson_failed', { ms: Date.now() - t0, error: String(e?.message ?? e).slice(0, 300) });
+  }
+}
+
 /** Starts a clean conversation; the one ending gets a memory pass (`why` names it in the log). */
 function freshSession(why) {
   const old = session;
-  session = newSession(config.provider, config.model); liveBlocks.clear(); agent = null; pendingFold = null; lastInput = null; quizDone = null; pruneSessions();
+  session = newSession(config.provider, config.model); liveBlocks.clear(); agent = null; pendingFold = null; lastInput = null; quizDone = null; lastRequest = null; pruneSessions();
   return why && old?.messages.length ? memoryPass(old, why) : Promise.resolve([]);
 }
 
@@ -1406,7 +1470,7 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
   turnVoice = voice;
   if (voice && intro) guideVoices.add(voice.id);
   const spoken = voice && new SpeechText((t) => voice.say(t), speech.localOpts?.());
-  let stalled = false, watch = null, learnAfter = false;
+  let stalled = false, watch = null, learnAfter = false, rated = false, learn = null;
   try {
     // Voice: a short first line before a tool ("On it, checking Paris.") is a beat: it's spoken, but not
     // shown, so the card or bubble starts with the answer. It shows after all if no tool follows.
@@ -1437,7 +1501,7 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
     requestNo = turn;
     logLine('request', { turn, model: config.model, chars: text.length, image: !!image, session: session?.id });
     const use = { t: Date.now(), model: config.model, calls: 0, tools: 0, in: 0, cacheRead: 0, cacheWrite: 0, out: 0 };
-    const learn = { ok: 0, bad: 0, saved: false }; // for the skill pass: tools that worked, ones that failed
+    learn = { ok: 0, bad: 0, saved: false }; // for the skill pass: tools that worked, ones that failed
     const soon = frontSoon; frontSoon = null;
     [frontNow, lessonsNow] = await Promise.all([
       frontWithin(soon && Date.now() - soon.at < 8000 ? soon.p : whereNow()),
@@ -1545,7 +1609,9 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
     // A reminder nudge, with "Listen after reminders" on: the same hands-free listen, for "snooze 10 minutes".
     const listen = !stalled && !controller.signal.aborted && ((byVoice && autoListenOn() && listensAfter(lastReply, config.listenEvery)) || (listenAfter && snoozeListenOn())) ? { turn, speech: voice?.id ?? null } : null;
     autoTurn = listen ? turn : null;
-    ui({ kind: 'agent', e: stalled ? { type: 'error', message: stallMessage(), speech: voice?.id ?? null } : { type: 'done', speech: voice?.id ?? null, ...(listen ? { listen } : {}) } });
+    rated = !stalled && !controller.signal.aborted && !!turnWords && learn.ok + learn.bad > 0;
+    const rate = rated && learningOn();
+    ui({ kind: 'agent', e: stalled ? { type: 'error', message: stallMessage(), speech: voice?.id ?? null } : { type: 'done', speech: voice?.id ?? null, ...(listen ? { listen } : {}), ...(rate ? { rate } : {}) } });
     logUsage({ ...use, ms: Date.now() - use.t });
     learnAfter = !config.lite && shouldLearn({ on: config.learnSkills !== false, okTools: learn.ok, errors: learn.bad, aborted: stalled || controller.signal.aborted, system: !turnWords, saved: learn.saved });
     logLine('request_done', { turn, ms: Date.now() - use.t, calls: use.calls, tools: use.tools, in: use.in, cacheRead: use.cacheRead, cacheWrite: use.cacheWrite, out: use.out });
@@ -1584,7 +1650,16 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
     for (const id of activity.stopped()) ui({ kind: 'agent', e: { type: 'tool_end', id, isError: true } });
     syncSession();
     // This request's turns, once they're in the session: the skill pass may learn from them (after their next message).
-    if (learnAfter && session) { const from = session.messages.findLastIndex((m) => m.role === 'user'); if (from >= 0) queueLearn(session.messages.slice(from), [...skillsUsed]); }
+    let req = null;
+    if ((learnAfter || rated) && session) {
+      const from = session.messages.findLastIndex((m) => m.role === 'user');
+      if (from >= 0) {
+        const messages = session.messages.slice(from), used = [...skillsUsed];
+        if (rated) req = { messages, used, ok: learn.ok, bad: learn.bad, saved: learn.saved, at: Date.now(), rated: null };
+        if (learnAfter) queueLearn(messages, used);
+      }
+    }
+    lastRequest = rateTarget(lastRequest, { req, rated: !!req, theirs: !!turnWords });
     if (stalled) agent = null; // the next request starts on a fresh connection, from the saved conversation
     // No usage reported: estimate what the last call sent.
     if (!lastInput && session) lastInput = { session: session.id, tokens: approxTokens(session.messages) + Math.round(system().length / 3.6), measured: false };
@@ -1601,7 +1676,12 @@ const stallMessage = () => `${PROVIDER_LABELS[config.provider] ?? 'The AI'} stop
 // ---------- asking the user (input bubble in the overlay) ----------
 let askSeq = 0;
 const pending = new Map();
+let askQueued = null;
 function ask(opts, signal) {
+  askQueued ??= oneYesNoAtATime(showAsk);
+  return askQueued(opts, signal);
+}
+function showAsk(opts, signal) {
   const id = `a${++askSeq}`;
   const to = onboarding ? ob : ui;
   // The setup guide has no buttons: its answer box takes a typed y.
@@ -1733,7 +1813,9 @@ function openUrl(url) {
 // A new look brings its voice: it greets you in it (its "One sec." beats are made again).
 function setLook(l) {
   if (!LOOKS.some(([id]) => id === l)) return;
-  const changed = l !== config.look;
+  const was = config.look ?? 'classic', changed = l !== was;
+  // The old look's replies stay in the history: the live state tells the new one it isn't them (looknote.mjs).
+  if (changed && session?.messages.length) { session.looks = lookSeen(session.looks, was); saveSession(session); }
   config.look = l; saveConfig();
   agentStale = true; // its name is in the prompt
   // Each look has its own voice with every service.
@@ -2231,7 +2313,7 @@ function panelState() {
       mics: mics.list, mic: config.mic ?? '', micAuto: mics.list.find((x) => x.id === mics.auto)?.name ?? '',
       download: NEEDS_MODEL && config.voice && !voiceReady() ? { status: voiceModel.status, pct: voiceModel.total ? Math.floor((voiceModel.done / voiceModel.total) * 100) : 0, size: sizeLabel() } : null,
     } : null,
-    sound: !!config.sound, actions: !!config.allowActions, skipAllow: !!config.skipAllow, lite: !!config.lite, hybrid: { on: !!config.hybrid, jobs: JOB_KINDS.map((j) => ({ ...j, value: parseSpec(config.heavy?.[j.kind])?.spec ?? '' })), active: routed?.spec ?? '' }, subagents: { on: !!config.subagents, delegate: DELEGATE_MODES.includes(config.delegate) ? config.delegate : 'ask', crew: SUBAGENTS.map((s) => { const c = activeCrew(config.crew, runnableSpec, hybridActive() ? config.heavy : null).find((x) => x.id === s.id); return { id: s.id, label: s.label, hint: s.hint, value: parseSpec(config.crew?.[s.id])?.spec ?? '', via: c?.via ?? '', uses: c?.spec.spec ?? '' }; }) }, efforts: Object.fromEntries(SLOTS.map((k) => [k, config.efforts?.[k] ?? ''])), fallbacks: { on: !!config.backups, slots: [0, 1].map((i) => parseSpec(config.fallbacks?.[i])?.spec ?? ''), limited: limits.list().filter((l) => !l.key.includes(':') && (isQuota(l.kind) || l.kind === 'busy')).map((l) => ({ label: PROVIDER_LABELS[l.key] ?? l.key, until: l.until })), unavailable: limits.list().filter((l) => !(isQuota(l.kind) || l.kind === 'busy')).map((l) => ({ label: PROVIDER_LABELS[l.key] ?? modelName(l.key.split(':').slice(1).join(':')) ?? l.key, why: becauseOf(l.kind), until: l.until })), using: routed && /^backup/.test(routed.slot ?? '') ? routed.spec : '' }, notch: notchMode(), notchReal: notchScreen, brief: { on: !!config.morningBrief, todoist: !!config.briefTodoist, canTodoist: HANDS_OK }, focus: HANDS_OK ? { until: focusBlock?.until ?? null, task: focusBlock?.task ?? '', list: distractionList(), custom: !!config.distractions } : null, sync: { dir: config.syncDir || '', at: syncInfo.at, error: syncInfo.error, paused: !!syncInfo.paused }, gameMode: HANDS_OK ? config.gameSidebar !== false : null,
+    sound: !!config.sound, volume: volumeNow(), actions: !!config.allowActions, skipAllow: !!config.skipAllow, lite: !!config.lite, hybrid: { on: !!config.hybrid, jobs: JOB_KINDS.map((j) => ({ ...j, value: parseSpec(config.heavy?.[j.kind])?.spec ?? '' })), active: routed?.spec ?? '' }, subagents: { on: !!config.subagents, delegate: DELEGATE_MODES.includes(config.delegate) ? config.delegate : 'ask', crew: SUBAGENTS.map((s) => { const c = activeCrew(config.crew, runnableSpec, hybridActive() ? config.heavy : null).find((x) => x.id === s.id); return { id: s.id, label: s.label, hint: s.hint, value: parseSpec(config.crew?.[s.id])?.spec ?? '', via: c?.via ?? '', uses: c?.spec.spec ?? '' }; }) }, efforts: Object.fromEntries(SLOTS.map((k) => [k, config.efforts?.[k] ?? ''])), fallbacks: { on: !!config.backups, slots: [0, 1].map((i) => parseSpec(config.fallbacks?.[i])?.spec ?? ''), limited: limits.list().filter((l) => !l.key.includes(':') && (isQuota(l.kind) || l.kind === 'busy')).map((l) => ({ label: PROVIDER_LABELS[l.key] ?? l.key, until: l.until })), unavailable: limits.list().filter((l) => !(isQuota(l.kind) || l.kind === 'busy')).map((l) => ({ label: PROVIDER_LABELS[l.key] ?? modelName(l.key.split(':').slice(1).join(':')) ?? l.key, why: becauseOf(l.kind), until: l.until })), using: routed && /^backup/.test(routed.slot ?? '') ? routed.spec : '' }, notch: notchMode(), notchReal: notchScreen, brief: { on: !!config.morningBrief, todoist: !!config.briefTodoist, canTodoist: HANDS_OK }, focus: HANDS_OK ? { until: focusBlock?.until ?? null, task: focusBlock?.task ?? '', list: distractionList(), custom: !!config.distractions } : null, sync: { dir: config.syncDir || '', at: syncInfo.at, error: syncInfo.error, paused: !!syncInfo.paused }, gameMode: HANDS_OK ? config.gameSidebar !== false : null,
     login: login.supported ? { on: login.on } : null,
     update: { available: update.available, installing: update.installing, checking: update.checking, result: update.result, page: update.page, done: update.done },
     intro: !!intro,
@@ -2544,6 +2626,7 @@ async function onMenu(id, via) {
   else if (id === 'syncallow') { syncAllowOnce = true; await syncPass().catch(() => {}); }
   else if (id === 'syncstop') { config.syncDir = ''; syncKey = null; syncAllowOnce = false; if (config.syncKeySaved) { await secrets.delete(SYNC_KEY).catch(() => {}); config.syncKeySaved = false; } saveConfig(); syncInfo = { at: null, error: null }; menu(); say('Stopped syncing. Everything stays on this computer, and the folder copy is left as it was.', 'happy'); }
   else if (id === 'gamemode' && HANDS_OK) { config.gameSidebar = config.gameSidebar === false; saveConfig(); menu(); gameModeTick().catch(() => {}); }
+  else if (/^volume:\d{1,3}$/.test(id)) { config.volume = Math.min(100, Number(id.slice(7))); saveConfig(); ui({ kind: 'volume', v: volumeNow() / 100 }); menu(); }
   else if (id === 'sound') { config.sound = !config.sound; saveConfig(); ui({ kind: 'sound', on: config.sound }); voiceConfig(); menu(); }
   else if (id === 'lite') {
     config.lite = !config.lite; saveConfig(); agentStale = true; menu();
@@ -2816,6 +2899,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
   else if (m.type === 'ui_ready') {
     retired.then((notes) => { if (notes.length) { retired = Promise.resolve([]); say(`${notes.join(' ')} Do it on the Model page in ${PANEL}.`, 'concerned'); } });
     ui({ kind: 'sound', on: config.sound });
+    ui({ kind: 'volume', v: volumeNow() / 100 });
     notchUi();
     ui({ kind: 'size', size: sizeNow() });
     ui({ kind: 'look', look: config.look ?? 'classic' });
@@ -2832,6 +2916,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
     logLine('auto_listen', { turn: m.turn });
     send({ type: 'listen', wait: autoListenOn() ? listenSecs() : 8 });
   }
+  else if (m.type === 'feedback') { if (m.good === true) onFeedback('good', '', 'button'); else wrongButton().catch((e) => console.error('feedback', e)); }
   else if (m.type === 'reply_said') { if (!busy) { holdWake(false); saidPending = false; clearTimeout(saidCap); stir(); } }
   else if (m.type === 'listen_cancel') { autoTurn = null; send({ type: 'listen_cancel' }); } // Esc while the mic is on
   // A link clicked on the research card: web and mail links only.
