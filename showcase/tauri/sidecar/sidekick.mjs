@@ -882,6 +882,9 @@ let session = null;
 // Requests (and reminders due at launch) wait for it, so they continue it instead of starting a new one.
 const resumed = loadLatestSession().then((s) => { if (s && !session) session = s; }).catch((e) => console.error('resume', e));
 const BUDGET_CAP = 120_000;
+const FOLD_BUDGET = 60_000;
+// After this long untouched, the next request starts a clean conversation (the old one gets a memory pass first).
+const IDLE_FRESH_MS = 30 * 60_000;
 // Tokens per request: kept tight for a quick reply out loud. The ChatGPT plan has its own windows (accountId).
 let credsAccountId;
 const requestBudget = () => Math.min(config.lite ? LITE_BUDGET : BUDGET_CAP, getContextWindow(config.model, { provider: config.provider, ...(agentRoute === 'api' && credsAccountId ? { accountId: credsAccountId } : {}) }) * 0.5);
@@ -1109,7 +1112,8 @@ let compacting = null, pendingFold = null;
 function maybeCompact() {
   if (compacting || intro || busy || queued || !session?.messages.length || !config.model) return;
   const tokens = lastInput?.session === session.id ? lastInput.tokens : 0;
-  const trigger = compactTrigger(requestBudget());
+  // Folded at 75 % of 60K at most (45K): each tool step re-reads the whole history, so a long one is paid many times.
+  const trigger = compactTrigger(Math.min(requestBudget(), FOLD_BUDGET));
   if (tokens < trigger) return;
   const plan = planFold(session.messages, { trigger });
   logLine('compact_check', { session: session.id, tokens, measured: !!lastInput?.measured, trigger, ...(plan.ok ? { fold: plan.end - plan.start, foldTokens: plan.tokens } : { skip: plan.reason }) });
@@ -1360,6 +1364,7 @@ async function readyAgent() {
     }
     await measureLocal(config.model);
   }
+  if (session?.messages.length && Date.now() - (session.lastActiveAt ?? 0) > IDLE_FRESH_MS) { logLine('fresh_after_idle', { session: session.id }); void freshSession('idle'); }
   if (!session) { session = newSession(config.provider, config.model); liveBlocks.clear(); agent = null; pruneSessions(); }
   if (agentStale && agent) { agent = null; }
   agentStale = false;
