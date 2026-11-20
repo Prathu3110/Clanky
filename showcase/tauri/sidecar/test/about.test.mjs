@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import { aboutClanky } from '../about.mjs';
 
 // The app's manual for about_clanky: each platform's own wording, and only the features this copy has.
-const base = { name: 'JARVIS', looks: ['Clanky', 'JARVIS', 'Anime Girl'], mac: false, linux: false, snap: false, pointer: false, voice: false, hotkeys: false };
+const base = { name: 'Clanky', personalities: ['Classic', 'Butler', 'Teacher', 'Sassy'], mac: false, linux: false, snap: false, pointer: false, voice: false, hotkeys: false };
 const mac = aboutClanky({ ...base, mac: true, snap: true, pointer: true, voice: true, hotkeys: true, wake: true });
 const win = aboutClanky(base);
 const linux = aboutClanky({ ...base, linux: true, voice: true, wake: true });
 assert.match(mac, /lives in the menu bar at the top of the screen/);
-assert.match(mac, /Show JARVIS, Ask JARVIS…, Ask About an Area…, Stop, Quit Clanky/);
-assert.match(mac, /Look: Clanky, JARVIS or Anime Girl/);
+assert.match(mac, /Show Clanky, Ask Clanky…, Ask About an Area…, Stop, Quit Clanky/);
+assert.match(mac, /Personality: Classic, Butler, Teacher or Sassy, each with its own tone, ghost colour and voice/);
 assert.match(mac, /Wake word \(say "Hey Clanky"/);
 assert.match(mac, /Voice Provider: Fish Audio, Gemini or VoiceStudio/);
 assert.match(win, /bottom right of the taskbar/);

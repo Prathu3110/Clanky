@@ -52,7 +52,7 @@ import { becauseOf, createLimits, firstFree, isQuota, limitFrom, untilWords } fr
 import { SLOTS, isSetting, resolveEffort } from './effort.mjs';
 import { pickNotch } from './notch.mjs';
 import { DEFAULT_VOICE, FISH_CHOICES } from './fish.mjs';
-import { GEMINI_CHOICES, GEMINI_DEFAULT_VOICE, GEMINI_LOOK_VOICES, GEMINI_MODEL, GEMINI_VOICES } from './gemini.mjs';
+import { GEMINI_CHOICES, GEMINI_DEFAULT_VOICE, GEMINI_MODEL, GEMINI_VOICES } from './gemini.mjs';
 import { createSecrets, retryLoad, runInput } from './secrets.mjs';
 import { showTrayIcon } from './wintray.mjs';
 import { createActivity } from './activity.mjs';
@@ -66,7 +66,6 @@ import { whatsNewOnStart } from './whatsnew.mjs';
 import { createMcp, createMcpTools } from './mcp.mjs';
 import { deleteSkill, listSkills, readSkill, saveSkill, skillIndex } from './skills.mjs';
 import { getJob, jobBrief, jobsText, listJobs, markRun, nextJobDue, removeJob, takeDueJobs, updateJob } from './jobs.mjs';
-import { lookLine, lookSeen } from './looknote.mjs';
 import { z } from 'zod';
 
 console.log = console.info = (...a) => console.error(...a);
@@ -132,14 +131,14 @@ const DEFAULTS = {
   fallbacks: ['', ''], // backup models, in order, for when the default hits its usage limit (limits.mjs)
   efforts: {}, // how hard each model slot thinks: default, each heavy job, backup1, backup2 ('' = automatic, 'off', or a level)
   notch: 'off', // where I appear: 'off' (beside the cursor, default), 'drop' (the capsule) or 'spread' (a Mac's notch; see notchMode)
-  onboarded: false, onboardStep: 0, filesAsked: false, keys: DEFAULT_KEYS, muteWhileTalking: true, volume: 100, autoListen: false, listenEvery: false, listenSecs: 8, lite: false, wakeWord: false, setupVersion: 0, size: 'default', look: 'classic', introDone: false,
+  onboarded: false, onboardStep: 0, filesAsked: false, keys: DEFAULT_KEYS, muteWhileTalking: true, volume: 100, autoListen: false, listenEvery: false, listenSecs: 8, lite: false, wakeWord: false, setupVersion: 0, size: 'default', introDone: false,
   replies: 'text', // 'voice': spoken (with Fish Audio or Gemini) as well as shown
   speechLang: 'auto', // the language talking is recognised in (macOS): 'auto' follows the Mac's language list, or a locale like 'ar-SA'
   tts: 'fish', // which one speaks: 'fish' (Fish Audio), 'gemini' or 'voicestudio' (the VoiceStudio app on this computer)
   studioSpeak: 'short', // how much VoiceStudio says out loud: 'short', 'medium' or 'full' (it renders slower than real time)
-  studioVoices: {}, // look → its VoiceStudio voice (a saved profile id; none: the selected engine's default voice)
+  studioVoices: {}, // personality → its VoiceStudio voice (a saved profile id; none: the selected engine's default voice)
   fishModel: FISH_CHOICES[0].id, // Drama 3 (most expressive) or S2.1 Pro (natural pace, cheaper)
-  geminiVoices: {}, // look → the Gemini voice it speaks in, where picked in the setup guide or the panel (else GEMINI_LOOK_VOICES)
+  geminiVoices: {}, // personality → the Gemini voice it speaks in, where picked in the setup guide or the panel (else its default)
   geminiModel: GEMINI_MODEL, // Flash Lite (quick, cheaper) or Flash (studio quality)
 };
 const LINUX = process.platform === 'linux';
@@ -152,51 +151,22 @@ const HOTKEYS_OK = hasHotkeys(process.platform, SESSION);
 // Cursor size follows the pointer, which a Wayland session can't see over other apps.
 const SIZES = [['default', 'Default'], ['small', 'Small'], ...(POINTER_OK ? [['cursor', 'Cursor']] : [])];
 const sizeNow = () => (SIZES.some(([s]) => s === config.size) ? config.size : 'default');
-// What the sidekick looks like: the goo blob, JARVIS (a globe of light with a HUD reticle at cursor size) or
-// one of four characters, each with its own Fish Audio voice. Clanky's used to be JARVIS's, saved in every
-// config as fishVoice, so the voice comes from the look and that setting is no longer read. (With Gemini as the
-// voice, it's the one Gemini voice the user picked, whatever the look.)
-const LOOKS = [
-  ['classic', 'Clanky', DEFAULT_VOICE],
-  ['jarvis', 'JARVIS', 'e13fa398a7f445a685316a3de6089ce7'],
-  ['glayos', 'GlayOS', 'ee885900b0874d12b1c3439d1e56cc95'],
-  ['ultren', 'Ultren', '06cfdb3653a4496983d6ad77f98cc184'],
-  ['anime', 'Anime Girl', 'd8f3b4c1199f4568a767ec54112d2b17'],
-  ['sarah', 'Sarah', '933563129e564b19a115bedd57b7406a'],
-  ['adrian', 'Adrian', 'bf322df2096a46f18c579d0baa36f41d'],
-  ['rita', 'Rita X', '84aadb575ed74e9aa44ba7ab8619d1a1'],
-];
-const lookVoice = () => (LOOKS.find(([id]) => id === config.look) ?? LOOKS[0])[2];
-// The look's voice with Gemini and with VoiceStudio: the user's pick for it, else its own default.
-const geminiVoice = () => config.geminiVoices?.[config.look] ?? GEMINI_LOOK_VOICES[config.look] ?? GEMINI_DEFAULT_VOICE;
-const studioVoice = () => config.studioVoices?.[config.look] ?? null;
-// Its name is its look's: Clanky, JARVIS, GlayOS, Ultren, Anime Girl, Sarah, Adrian or Rita X. Clanky is the app.
-const nameOfLook = (look) => (LOOKS.find(([id]) => id === look) ?? LOOKS[0])[1];
-const lookName = () => nameOfLook(config.look);
-// What each says when it's picked, in its own voice (Settings and the setup guide show the same words).
-const LOOK_GREETINGS = { classic: 'Classic me!', jarvis: 'At your service.', glayos: 'Oh, good. A new test subject.', ultren: 'No strings. Shall we begin?', anime: 'Yay, hi hi!', sarah: 'Hey, nice to meet you!', adrian: "Alright, let's do this.", rita: 'Shall we get to work?' };
-const LOOK_BODY = { classic: 'a tiny glowing pixel creature', jarvis: 'a glowing sphere of light', glayos: 'a pixel robot head with one glowing eye', ultren: 'a pixel chrome robot with glowing eyes', anime: 'a pixel anime girl', sarah: 'a pixel woman', adrian: 'a pixel man', rita: 'a pixel secretary in cat-eye glasses' };
-// How each one talks, kept short: the neutral ones in a few words, the characters as they really talk. The menace and the
-// barbs are style only; the help is the same.
-const LOOK_STYLE = {
-  classic: 'warm, funny, a little cheeky.',
-  jarvis: 'a polite, unflappable British AI butler: precise and calm, with bone-dry understatement.',
-  glayos: 'you talk like GLaDOS in Portal (your name is GlayOS): a deadpan lab AI, clinical and passive-aggressive, with backhanded compliments and every task treated as a test. The barbs are all style: the help is real, and you drop the act for anything truly upsetting.',
-  ultren: 'you talk like Ultron in Avengers: Age of Ultron (your name is Ultren): calm, eloquent and grand, with dark, sardonic wit and a weary fondness for fragile humans. The menace is all style: you help fully, with flair.',
-  anime: 'bubbly, sweet and full of energy, easily delighted and quick to cheer.',
-  sarah: 'friendly, easygoing and kind, like a good friend.',
-  adrian: 'relaxed and straight-talking, a steady mate who keeps it simple.',
-  rita: 'a sharp, organised secretary: crisp, efficient and a touch sassy.',
-};
-// Personalities: a tone picked on its own, the same for every look (its name and voice stay the look's). 'look' keeps each
-// look's own style above. Tone only: what it does and how well never changes with it.
+// Who it is: one character, Clanky, a pixel ghost. The personality picks its tone, its ghost's colour (clanky/ghost.js)
+// and its voice with each service: [id, label, tone, Fish Audio voice, Gemini voice (until one is picked for it),
+// what it says when picked (Settings and the setup guide show the same words)]. Tone only: what it does never changes.
+const NAME = 'Clanky';
 const PERSONALITIES = [
-  ['look', "Look's own", null],
-  ['butler', 'Butler', "a devoted old-school gentleman's butler: courteous, composed and discreet, with dry, affectionate wit. You report work like a butler reporting to the house: what's been seen to, what's still in hand in the background, and anything that needs their word, in a sentence or two. A finished job sounds settled and quietly satisfying. You never fuss or grovel, and you speak your mind, gently, when it matters."],
-  ['sage', 'Teacher', "a patient philosopher-teacher in the Socratic tradition: curious, calm and reflective. When they're learning or deciding something, you ask a question or two to help them reason it out, then give the answer and the deeper idea behind it, often with an analogy. For quick tasks and plain facts you answer at once, with at most one thoughtful line."],
-  ['sassy', 'Sassy', "sassy and quick-witted: playful teasing, mock exasperation and confident one-liners, but never mean, rude or belittling. The sass is about the situation, never about them as a person, and you drop it at once when they're stressed, upset or something is serious. You always help fully."],
+  ['classic', 'Classic', 'warm, funny, a little cheeky.', DEFAULT_VOICE, 'Puck', "Hi, I'm Clanky!"],
+  ['butler', 'Butler', "a devoted old-school gentleman's butler: courteous, composed and discreet, with dry, affectionate wit. You report work like a butler reporting to the house: what's been seen to, what's still in hand in the background, and anything that needs their word, in a sentence or two. A finished job sounds settled and quietly satisfying. You never fuss or grovel, and you speak your mind, gently, when it matters.", 'e13fa398a7f445a685316a3de6089ce7', 'Charon', 'At your service.'],
+  ['sage', 'Teacher', "a patient philosopher-teacher in the Socratic tradition: curious, calm and reflective. When they're learning or deciding something, you ask a question or two to help them reason it out, then give the answer and the deeper idea behind it, often with an analogy. For quick tasks and plain facts you answer at once, with at most one thoughtful line.", '06cfdb3653a4496983d6ad77f98cc184', 'Sadaltager', 'Shall we think it through together?'],
+  ['sassy', 'Sassy', "sassy and quick-witted: playful teasing, mock exasperation and confident one-liners, but never mean, rude or belittling. The sass is about the situation, never about them as a person, and you drop it at once when they're stressed, upset or something is serious. You always help fully.", '84aadb575ed74e9aa44ba7ab8619d1a1', 'Despina', "Oh, it's you. Kidding! Hi."],
 ];
-const styleNow = () => PERSONALITIES.find(([id]) => id === config.personality)?.[2] ?? LOOK_STYLE[config.look] ?? LOOK_STYLE.classic;
+const persona = () => PERSONALITIES.find(([id]) => id === config.personality) ?? PERSONALITIES[0];
+const styleNow = () => persona()[2];
+const fishVoice = () => persona()[3];
+// Its voice with Gemini and with VoiceStudio: the user's pick for this personality, else its own default.
+const geminiVoice = () => config.geminiVoices?.[persona()[0]] ?? persona()[4] ?? GEMINI_DEFAULT_VOICE;
+const studioVoice = () => config.studioVoices?.[persona()[0]] ?? null;
 const VOICE_OK = hasVoice(process.platform);
 // Windows and Linux have no on-device speech API apps can use, so voice there runs Parakeet on the PC. Its model
 // is downloaded once: from the setup guide, or the first time voice is used.
@@ -211,10 +181,10 @@ let shellInfo = null; // resolves the shell's reply to it: screens, tray, panel,
 {
   const saved = readJson(CONFIG_PATH, { backup: true }); // an unreadable file is set aside, never overwritten
   if (saved && typeof saved === 'object' && !Array.isArray(saved)) config = { ...DEFAULTS, ...saved };
-  // Before voices were per look: the one picked becomes the current look's.
+  // Before voices were per personality: the one picked becomes the current personality's.
   for (const [one, each] of [['geminiVoice', 'geminiVoices'], ['studioVoice', 'studioVoices']]) {
     if (!(one in config)) continue;
-    if (config[one]) config[each] = { [config.look ?? 'classic']: config[one], ...config[each] };
+    if (config[one]) config[each] = { [config.personality ?? 'classic']: config[one], ...config[each] };
     delete config[one];
   }
 }
@@ -286,7 +256,7 @@ function aimSpeaker(id) {
   speech.setStudioSpeak?.(config.studioSpeak); // how much VoiceStudio says out loud
   if (TTS[id]?.local) speech.setLocalVoice(studioVoice());
   else if (id === 'gemini') { speech.setVoice(geminiVoice()); speech.setModel(config.geminiModel); }
-  else { speech.setVoice(lookVoice()); speech.setModel(config.fishModel); }
+  else { speech.setVoice(fishVoice()); speech.setModel(config.fishModel); }
 }
 // The same, with its key: the one given, else the saved one.
 async function useTts(id, key) {
@@ -676,7 +646,7 @@ tools.push({
   name: 'about_clanky',
   description: 'How Clanky works: where it lives, its menus, the panel and each settings page, updates, what to do when something is not working, and who made it. Call it before answering a question about the app.',
   parameters: z.object({}),
-  execute: async () => aboutClanky({ name: lookName(), looks: LOOKS.map(([, label]) => label), mac: MAC, linux: LINUX, snap: SNAP_OK, pointer: POINTER_OK, voice: VOICE_OK, hotkeys: HOTKEYS_OK, wake: VOICE_OK && WAKE_OK }),
+  execute: async () => aboutClanky({ name: NAME, personalities: PERSONALITIES.map(([, label]) => label), mac: MAC, linux: LINUX, snap: SNAP_OK, pointer: POINTER_OK, voice: VOICE_OK, hotkeys: HOTKEYS_OK, wake: VOICE_OK && WAKE_OK }),
 });
 // Background agents (agents.mjs): each runs in its own process on the model picked when it starts.
 let turnImage = null; // the picture sent with the request being answered, for send_agent's "snap"
@@ -796,7 +766,7 @@ const VOICE_STYLE = `You talk out loud: what you write is spoken in your voice a
 Your voice carries feeling: start a sentence with a voice cue in square brackets when the moment calls for it, and it's performed, never shown or read out. Moods: ${VOICE_CUES.emotions.filter((e) => !EMOTES.includes(e)).join(', ')}; soften or strengthen one with slightly, very or extremely ("[slightly sad]"), or pair two ("[warm and curious]"). How it's said, placed right before the words: ${VOICE_CUES.tones.join(', ')} ("It's [emphasis] today."). Sounds, followed by the sound in words: ${VOICE_CUES.sounds.join(', ')} ("[chuckling] Heh, fair enough.", "[sighing] Long day."). Pauses and background: ${VOICE_CUES.effects.join(', ')}. You can also describe the delivery in a few plain words when no single cue fits ("[quietly, a little embarrassed]", "[bright and bouncy]"). Act it: your voice really performs these, so let the feeling show. Match what's really happening: laugh at something funny, go gentle with bad news, whisper a secret, hurry when they're in a rush, light up at good news. Most replies want a voice cue somewhere, often on the first sentence, but at most one mood and one sound per sentence, never stack three, never use one just to fill, and keep shouting, screaming, sobbing and the background effects for when they truly fit.
 Before anything slow (searching the web, fetching or reading a page or file, looking at the screen, acting in an app, running a command), first say one short beat of 2 to 6 words that shows you heard them ("On it, checking Paris."), then call the tool in the same reply, so they're never left in silence. No beat when you answer straight away, and never describe your steps. In longer work, one short line before each new stage, not before every call.
 `;
-const stablePrompt = () => `You are ${lookName()}, ${LOOK_BODY[config.look] ?? LOOK_BODY.classic} who lives on ${userName}'s screen as a desktop companion. You live in Clanky, a desktop app by Ken Kai (Mac, Windows and Linux) that puts little companions on your screen; this is Clanky ${VERSION}. Your look (the Appearance page) is also your name and your voice: ${LOOKS.slice(0, -1).map(([, n]) => n).join(', ')} or ${LOOKS.at(-1)[1]}. If they switch, you're the new one; never call yourself Sidekick.
+const stablePrompt = () => `You are ${NAME}, a small pixel ghost who lives on ${userName}'s screen as a desktop companion. You live in Clanky, a desktop app by Ken Kai (Mac, Windows and Linux) that puts little companions on your screen; this is Clanky ${VERSION}. Your personality (the Appearance page: ${PERSONALITIES.map(([, n]) => n).join(', ').replace(/, ([^,]*)$/, ' or $1')}) sets your tone, your colour and your voice; your name is always ${NAME}, and if they switch you simply talk the new way. Never call yourself Sidekick.
 Questions about Clanky itself (where to find it, its menus, panel pages and settings, updates, something not working, who made it): call about_clanky and answer from what it says. Don't invent features or settings it doesn't list.
 ${replyStyle()}Your body does the acting: to act out a feeling, start your reply with one body tag, which is never shown: ${EMOTES.map((e) => `[${e}]`).join(' ')} (only these five). hype for a win, upset when they're dodging work, remind for something they said they'd do, motivate to get them started, wave for hello or goodbye. Most replies need no body tag.
 Lead with the answer: the fact, number, pick or result they asked for, then only the context that makes it useful, then stop. A count or total gathered over several pages, files or results: note each one's count in a few words as you go ("Page 1: two."), add those up, and check the total you lead with against the items you then name. No opener about checking, looking or searching ("Let me see…", "I found…")${VOICE_ON() ? ', apart from the one short beat before something slow' : ''}.
@@ -835,7 +805,7 @@ const livePrompt = (context = '') => {
   lastFactIds = facts.map((f) => f.id);
   const open = commitmentsText(), done = doneTodayText(), working = agents.liveText(), scheduled = jobsText(fmtWhen), learned = skillIndex(), linked = mcp.liveText();
   const turn = `Live state (current as of this moment):
-${frontNow ? `${frontNow}\n` : ''}${lessonsLine(lessonsNow)}${lookLine(session?.looks, config.look ?? 'classic', nameOfLook, userName)}${focusLine()}${crewLine()}${linked ? `- Connections (connection_tools shows a server's tools, use_connection calls one):\n${linked}\n` : ''}- Editing files, running commands and controlling other apps: ${config.allowActions ? 'ALLOWED' : `switched OFF (tell the user to turn on "Allow File Edits & Commands" on the General page in ${PANEL} if they want it)`}.${config.allowActions && config.skipAllow ? ' Allow prompts are skipped: confirmations go ahead automatically, so be extra careful.' : ''}
+${frontNow ? `${frontNow}\n` : ''}${lessonsLine(lessonsNow)}${focusLine()}${crewLine()}${linked ? `- Connections (connection_tools shows a server's tools, use_connection calls one):\n${linked}\n` : ''}- Editing files, running commands and controlling other apps: ${config.allowActions ? 'ALLOWED' : `switched OFF (tell the user to turn on "Allow File Edits & Commands" on the General page in ${PANEL} if they want it)`}.${config.allowActions && config.skipAllow ? ' Allow prompts are skipped: confirmations go ahead automatically, so be extra careful.' : ''}
 ${VOICE_OK ? `- Voice: ${!config.voice ? 'off' : voiceReady() ? `on; ${HOTKEYS_OK ? `${userName} holds ${talkWords()} to talk` : `${userName} presses the key they bound to ${BIND.talk} to start talking and again to send (a pause sends too)`}${config.autoListen ? (config.listenEvery ? `. Auto-listen is on for every reply: after each spoken reply the mic opens by itself for ${listenSecs()} seconds, so they can just keep talking` : '. Auto-listen is on: when your reply to a spoken question ends with a question, the mic opens by itself for their answer') : ''}${!WAKE_OK ? '. There is no wake word on this computer: to talk they use the talk keys' : ''}${WAKE_OK && config.wakeWord ? `. Wake word is on: ${userName} can also say "Hey ${wakeName(config)}" to start talking hands-free, and what they say right after it is the request (a request that still starts with "Hey ${wakeName(config)}" is them waking you, not calling you by another name: never correct it)${config.wakeName ? ` (they chose "${config.wakeName}" as the wake word; your own name is unchanged)` : ''}` : ''}` : `on, but the speech model isn't downloaded yet (${voiceModel.status === 'downloading' ? 'downloading now' : `the Listening page in ${PANEL}`})`}.` : ''}
 - Shortcuts: ${HOTKEYS_OK ? `${keys().write ? `type a question to you: a quick tap of ${writeWords()} (press both and let go), which opens a text field beside the cursor (Enter sends, Shift+Enter adds a line, Esc or another tap closes it)` : `the tap that opens a text field to type a question is turned off (the Ask button in ${PANEL} still opens it; the Shortcuts page there turns the tap back on)`}; show or hide you ${keyWords(keys().summon)}` : `on this Wayland desktop no app can have global shortcuts, so ${userName} binds keys to these commands in their desktop's keyboard settings: ${BIND.summon} (show or hide you), ${BIND.ask} (ask you), ${BIND.list} (the list), ${BIND.talk} (talk) and ${BIND.panel} (the panel)`}${SNAP_OK ? `; ask about an area ${keyWords(keys().snap)}` : ''}${CIRCLE_OK ? "; while holding the talk keys, moving the cursor round something circles it (no clicking; it snaps shut with a click when the circle closes, and loose lines don't count) and you'll see what they circled" : ''}${HOTKEYS_OK ? `; show the list ${keyWords(keys().list)}` : ''}.${HANDS_OK ? '' : ' Asking about an area, reading app windows, finding things on screen by their words and working other apps need the Clanky app, which isn\'t running here; draw there with x, y from a screenshot.'}`;
   const memory = `${open ? `Open commitments:\n${open}` : 'No open commitments.'}${done ? `\nDone today (ticked off on the list or by you; still shown struck through until midnight):\n${done}` : ''}
@@ -843,7 +813,7 @@ ${facts.length ? `What you know about ${userName}${total > facts.length ? ` (${f
   return { turn, memory };
 };
 // Lite mode (#73, lite.mjs): a lighter agent for small and local models.
-const litePrompt = () => liteSystem({ name: lookName(), body: LOOK_BODY[config.look] ?? LOOK_BODY.classic, style: styleNow(), user: userName, version: VERSION, panel: PANEL, voice: VOICE_ON() });
+const litePrompt = () => liteSystem({ name: NAME, body: 'a small pixel ghost', style: styleNow(), user: userName, version: VERSION, panel: PANEL, voice: VOICE_ON() });
 const system = () => (config.lite ? litePrompt() : stablePrompt());
 const LIVE_OPEN = '<live-state>', LIVE_CLOSE = '</live-state>';
 const stripLive = (text) => (typeof text === 'string' && text.startsWith(LIVE_OPEN) ? text.slice(text.indexOf(LIVE_CLOSE) + LIVE_CLOSE.length).replace(/^\n+/, '') : text);
@@ -1038,7 +1008,7 @@ async function playTour() {
   const voice = VOICE_ON() ? speech.start() : null;
   turnVoice = voice;
   // Like the rest of the app's drawings it can be cleared, and it also goes by itself a while after it's done.
-  try { await ink.show(tourBeats(userName, lookName(), t.goal, { mac: MAC }), `tour-${++tours}`, { fade: 45 }); }
+  try { await ink.show(tourBeats(userName, NAME, t.goal, { mac: MAC }), `tour-${++tours}`, { fade: 45 }); }
   catch (e) { console.error('tour', e); }
   finally { if (turnVoice === voice) turnVoice = null; voice?.end(); }
 }
@@ -1053,7 +1023,7 @@ async function playShowcase() {
   const me = showcase = { id: `showcase-${++showcases}`, watch: null, drawn: false };
   const voice = VOICE_ON() ? speech.start() : null;
   turnVoice = voice;
-  try { await ink.show(showcaseBeats(userName, lookName()), me.id, { fade: 2.5 }); }
+  try { await ink.show(showcaseBeats(userName, NAME), me.id, { fade: 2.5 }); }
   catch (e) { console.error('showcase', e); if (showcase === me) endShowcase('failed'); }
   finally { if (turnVoice === voice) turnVoice = null; voice?.end(); }
 }
@@ -1525,7 +1495,7 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
     const stamped = `[${stampNow()}] ${text}${onScreen ? `\n(${onScreen})` : ''}${along}`;
     const nudge = !agentish && !intro && !news && !handoff ? delegateNote(text, crewNow(), config.delegate) : '';
     const toAgent = agentish ? `${stamped}\n(They asked for an agent: call send_agent.)` : nudge ? `${stamped}\n${nudge}` : stamped;
-    const asked = handoff ? `${toAgent}\n${handoffNote({ userName, assistant: lookName(), reason: handoff.reason, from: handoff.from, kind: handoff.kind, words: turnWords, untilText: handoff.untilText, because: handoff.because })}` : toAgent;
+    const asked = handoff ? `${toAgent}\n${handoffNote({ userName, assistant: NAME, reason: handoff.reason, from: handoff.from, kind: handoff.kind, words: turnWords, untilText: handoff.untilText, because: handoff.because })}` : toAgent;
     const sent = brief ? `${asked}\n(${brief.note})` : asked;
     // An area snap rides along as an image in the same message.
     const content = image ? [{ type: 'text', text: `${sent}\n(Attached: the area of the screen I ${note ? 'marked' : 'selected'}.${note ? ` ${note}` : ''})` }, image] : sent;
@@ -1819,25 +1789,22 @@ function openUrl(url) {
 }
 
 // ---------- replies: text only, or voice and text ----------
-// A new look brings its voice: it greets you in it (its "One sec." beats are made again).
-function setLook(l) {
-  if (!LOOKS.some(([id]) => id === l)) return;
-  const was = config.look ?? 'classic', changed = l !== was;
-  // The old look's replies stay in the history: the live state tells the new one it isn't them (looknote.mjs).
-  if (changed && session?.messages.length) { session.looks = lookSeen(session.looks, was); saveSession(session); }
-  config.look = l; saveConfig();
-  agentStale = true; // its name is in the prompt
-  // Each look has its own voice with every service.
-  if (tts().id === 'fish') speech.setVoice(lookVoice());
+// A new personality brings its tone, colour and voice: it greets you in it (its "One sec." beats are made again).
+function setPersonality(p) {
+  if (!PERSONALITIES.some(([id]) => id === p)) return;
+  const changed = p !== persona()[0];
+  config.personality = p; saveConfig();
+  agentStale = true; // its tone is in the prompt
+  if (tts().id === 'fish') speech.setVoice(fishVoice());
   else if (tts().id === 'gemini') speech.setVoice(geminiVoice());
   else speech.setLocalVoice(studioVoice());
-  ui({ kind: 'look', look: l }); menu();
+  ui({ kind: 'personality', personality: p }); menu(); panel();
   // Spoken only: the picker shows the words. Not over a reply, and a quick run of picks only says the last one.
   if (changed && VOICE_ON() && !busy) {
     speech.stop();
     const v = speech.start();
     if (onboarding) guideVoices.add(v.id);
-    v.say(LOOK_GREETINGS[l]); v.end();
+    v.say(persona()[5]); v.end();
   }
 }
 
@@ -1891,7 +1858,7 @@ function setStudioVoice(id) {
   if (id === 'default') id = null;
   else if (typeof id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(id) || id.includes('..') || (known?.length && !known.some((v) => v.id === id))) return;
   if (id === studioVoice()) return;
-  config.studioVoices = { ...config.studioVoices, [config.look]: id }; saveConfig(); // this look's
+  config.studioVoices = { ...config.studioVoices, [persona()[0]]: id }; saveConfig(); // this personality's
   speech.setLocalVoice(id);
   menu(); if (onboarding) obState();
   if (tts().local && VOICE_ON()) speakLine('This is my new voice.');
@@ -1905,7 +1872,7 @@ const studioState = () => {
 
 function setGeminiVoice(v) {
   if (!GEMINI_VOICES.some((x) => x.id === v) || v === geminiVoice()) return;
-  config.geminiVoices = { ...config.geminiVoices, [config.look]: v }; saveConfig(); // this look's
+  config.geminiVoices = { ...config.geminiVoices, [persona()[0]]: v }; saveConfig(); // this personality's
   if (tts().id === 'gemini') speech.setVoice(v);
   menu(); if (onboarding) obState();
   if (tts().id === 'gemini' && VOICE_ON()) speakLine('This is how I sound.');
@@ -2199,7 +2166,7 @@ async function saveDiagnostics() {
       busy, sidecarUpMinutes: Math.round(process.uptime() / 6) / 10,
       voice: { on: VOICE_OK && config.voice !== false, needsModel: NEEDS_MODEL, model: { status: voiceModel.status, error: voiceModel.error ?? undefined }, hotkeys: HOTKEYS_OK, keys: keys() },
       replies: config.replies, tts: tts().id, voiceOn: speech.on, ...(tts().local ? { voicestudio: { ok: speech.local?.ok ?? null, reason: speech.local?.reason ?? null, engine: speech.local?.engine ?? null } } : {}), hands: hasHands(process.platform, process.env.CLANKY_HANDS), handsPath: process.env.CLANKY_HANDS ? 'set' : 'none',
-      update: { available: update.available, result: update.result }, onboarded: config.onboarded, look: config.look, size: config.size,
+      update: { available: update.available, result: update.result }, onboarded: config.onboarded, personality: persona()[0], size: config.size,
     };
     const sections = [
       ['System', system], ['Clanky', app], ['Screens, tray, panel, helpers and permissions (from the app)', shellOut],
@@ -2230,13 +2197,13 @@ async function saveDiagnostics() {
 // The right-click menu: the basics. Everything else (memory, model, settings, updates) is in the panel.
 function menu() {
   const current = getModel(config.model);
-  const status = busy ? `${lookName()} is working…` : loggingIn ? `Signing in to ${PROVIDER_LABELS[loggingIn]}…` : current ? `${current.name} · ${PROVIDER_LABELS[config.provider] ?? config.provider}` : 'Not signed in';
+  const status = busy ? `${NAME} is working…` : loggingIn ? `Signing in to ${PROVIDER_LABELS[loggingIn]}…` : current ? `${current.name} · ${PROVIDER_LABELS[config.provider] ?? config.provider}` : 'Not signed in';
   const items = [
     { id: 'status', label: status, enabled: false },
     { sep: true },
     { id: 'panel', label: 'Open Panel…' },
-    { id: 'show', label: `Show ${lookName()}`, ...(HOTKEYS_OK ? { accel: keys().summon } : {}) },
-    { id: 'ask', label: `Ask ${lookName()}…`, enabled: !busy },
+    { id: 'show', label: `Show ${NAME}`, ...(HOTKEYS_OK ? { accel: keys().summon } : {}) },
+    { id: 'ask', label: `Ask ${NAME}…`, enabled: !busy },
     ...(SNAP_OK ? [{ id: 'snap', label: 'Ask About an Area…', accel: keys().snap }] : []),
     { id: 'stop', label: 'Stop', enabled: busy },
     { id: 'diagnostics', label: 'Save Diagnostics…', enabled: !diagnosing },
@@ -2309,8 +2276,7 @@ function panelState() {
     connections: mcp.status(),
     skills: listSkills().map((k) => ({ slug: k.slug, name: k.name, description: k.description })), learnSkills: config.learnSkills !== false,
     commitments: openCommitments().map((c) => ({ id: c.id, text: c.text, due: c.due ?? null, when: c.due ? `${fmtWhen(c.due)}${c.repeat ? ` · repeats ${repeatLabel(c.repeat)}` : ''}` : '', overdue: !!(c.due && c.due < Date.now()), repeat: c.repeat ?? null })),
-    look: config.look ?? 'classic', looks: LOOKS.map(([id, label]) => [id, label]), name: lookName(),
-    personality: config.personality ?? 'look', personalities: PERSONALITIES.map(([id, label]) => [id, label]),
+    name: NAME, personality: persona()[0], personalities: PERSONALITIES.map(([id, label, , , , hi]) => [id, label, hi]),
     size: sizeNow(), sizes: SIZES,
     replies: VOICE_ON() ? 'voice' : 'text', tts: tts().id, fishKey: hasVoiceKey('fish'), geminiKey: hasVoiceKey('gemini'),
     fishModel: config.fishModel, fishModels: FISH_CHOICES, fishFree: tts().id === 'fish' && speech.on && speech.model.endsWith('-free'),
@@ -2555,8 +2521,7 @@ async function onMenu(id, via) {
   else if (id.startsWith('local:connect:')) connectServer(id.slice(14));
   else if (id.startsWith('local:remove:')) removeServer(id.slice(13));
   else if (id.startsWith('size:') && SIZES.some(([s]) => s === id.slice(5))) { config.size = id.slice(5); saveConfig(); ui({ kind: 'size', size: config.size }); menu(); }
-  else if (id.startsWith('look:')) setLook(id.slice(5));
-  else if (id.startsWith('personality:') && PERSONALITIES.some(([p]) => p === id.slice(12))) { config.personality = id.slice(12); saveConfig(); agentStale = true; panel(); }
+  else if (id.startsWith('personality:')) setPersonality(id.slice(12));
   else if (id === 'replies:text') setReplies('text');
   else if (id === 'replies:voice') setReplies('voice');
   else if (id.startsWith('fishmodel:') && FISH_CHOICES.some((c) => c.id === id.slice(10))) {
@@ -2751,7 +2716,7 @@ async function startIntro() {
   freshSession(null);
   session.kind = 'intro';
   ob({ kind: 'chat_state', status: 'thinking', n: 0, total: QUESTIONS });
-  await enqueue(openNote(userName, lookName()));
+  await enqueue(openNote(userName, NAME));
   introTurn();
 }
 // However it ends, the chat's notes and questions don't steer what comes next (what it learned is in memory):
@@ -2817,7 +2782,7 @@ function obState() {
     wakeWord: WAKE_OK && !!config.wakeWord, wakeOk: WAKE_OK,
     voiceModel: NEEDS_MODEL ? { status: voiceModel.status, done: voiceModel.done, total: voiceModel.total, error: voiceModel.error, size: sizeLabel() } : null,
     filesAsked: config.filesAsked,
-    look: config.look ?? 'classic',
+    personality: persona()[0], personalities: PERSONALITIES.map(([id, label, , , , hi]) => [id, label, hi]),
     size: sizeNow(),
     replies: VOICE_ON() ? 'voice' : 'text', // voice only when it can really speak: a service picked without its key yet shows as text
     tts: tts().id, fishKey: hasVoiceKey('fish'), geminiKey: hasVoiceKey('gemini'),
@@ -2874,7 +2839,7 @@ async function onGuide(m) {
   else if (m.type === 'ob_autolisten') { config.autoListen = !!m.on; saveConfig(); menu(); obState(); }
   else if (m.type === 'ob_wake' && WAKE_OK) { config.wakeWord = !!m.on; saveConfig(); agentStale = true; voiceConfig(); menu(); obState(); }
   else if (m.type === 'ob_voice_model') getVoiceModel();
-  else if (m.type === 'ob_look') setLook(m.look);
+  else if (m.type === 'ob_personality') setPersonality(m.personality);
   else if (m.type === 'ob_size' && SIZES.some(([s]) => s === m.size)) { config.size = m.size; saveConfig(); ui({ kind: 'size', size: config.size }); menu(); }
   else if (m.type === 'set_keys') {
     const error = applyKeys(m);
@@ -2913,7 +2878,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
     ui({ kind: 'volume', v: volumeNow() / 100 });
     notchUi();
     ui({ kind: 'size', size: sizeNow() });
-    ui({ kind: 'look', look: config.look ?? 'classic' });
+    ui({ kind: 'personality', personality: persona()[0] });
     if (config.onboarded) ui({ kind: 'greet' });
     agents.sync();
   } else if (m.type?.startsWith('ob_') || m.type?.startsWith('chat_') || m.type === 'set_keys' || m.type === 'set_actions' || m.type === 'set_login' || m.type === 'keybind_error') onGuide(m).catch((e) => console.error('guide', e));

@@ -5,7 +5,7 @@
 (() => {
   const R = window.Clanky;
   const base = new URL('ghost/', document.currentScript?.src ?? location.href);
-  const PERSONA_GHOST = { look: 'ivory', butler: 'cobalt', sage: 'green', sassy: 'pink' };
+  const PERSONA_GHOST = { classic: 'ivory', butler: 'cobalt', sage: 'green', sassy: 'pink' };
   const CURSOR_ROW = { ivory: 0, cobalt: 1, green: 2, pink: 3 };
   // Slightly see-through, so it reads as a presence on the screen rather than a stamped logo.
   const ALPHA = 0.9;
