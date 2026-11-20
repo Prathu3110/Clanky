@@ -986,32 +986,30 @@
             link('Stop', () => act('syncstop'), { k: 'syncstop', aria: 'Stop syncing memory' })] : link('Set up', () => act('syncsetup'), { k: 'syncsetup', aria: 'Set up memory sync' })) : null),
     ];
   }
-  // Who makes Clanky (the ghost, live), and where Clanky comes from: Roamies by Ken Kai, and his links.
-  const KEN = [
-    ['Skool', 'Learn with Ken, or support him', 'https://www.skool.com/kenkai', "Open Ken Kai's Skool community"],
-    ['YouTube', '@kenkaidoesai', 'https://www.youtube.com/@kenkaidoesai', "Open Ken Kai's YouTube channel"],
-    ['TikTok', '@ggkenkai', 'https://www.tiktok.com/@ggkenkai', "Open Ken Kai's TikTok"],
+  // Who makes Clanky (the ghost, live), its source, and the project it's built on (AGPL-3.0 keeps that credit).
+  const LINKS = [
     ['Source code', 'Open source under AGPL-3.0', 'https://github.com/Prathu3110/Clanky', 'Open the Clanky source code on GitHub'],
+    ['Based on Roamies', 'The open-source app by Ken Kai that Clanky is built on', 'https://github.com/KenKaiii/Roamies', 'Open the Roamies source code on GitHub'],
   ];
-  let ken = null;
+  let makerCard = null;
   function maker() {
-    if (!ken) {
+    if (!makerCard) {
       const cv = el('canvas', { 'aria-hidden': 'true' });
       const r = liveClanky(cv, 100, 74, { persona: 'classic', y: 0.55 });
-      const card = el('div', { className: 'maker' }, cv, el('span', {}, 'Prathu3110', el('small', { textContent: 'Maker of Clanky · based on Roamies by Ken Kai' })));
+      const card = el('div', { className: 'maker' }, cv, el('span', {}, 'Prathu3110', el('small', { textContent: 'Maker of Clanky' })));
       let waved = 0;
       card.addEventListener('pointerenter', () => { if (r && Date.now() - waved > 3500) { waved = Date.now(); r.act('wave'); } });
       r?.appear('crt');
-      ken = card;
+      makerCard = card;
     }
-    return ken;
+    return makerCard;
   }
   function aboutPage() {
     return [
       group('Made by', null, null, maker(),
-        KEN.map(([label, hint, url, aria]) => el('div', { className: 'setting' },
+        LINKS.map(([label, hint, url, aria]) => el('div', { className: 'setting' },
           el('span', {}, label, el('small', { textContent: hint })),
-          link('Open', () => send({ type: 'open_link', url }), { k: `ken-${label.toLowerCase()}`, aria })))),
+          link('Open', () => send({ type: 'open_link', url }), { k: `link-${label.toLowerCase().replace(/ /g, '-')}`, aria })))),
       group('Help', null, null,
         el('div', { className: 'links' },
           link('Setup guide', () => act('setup', true), { k: 'setup' }),
