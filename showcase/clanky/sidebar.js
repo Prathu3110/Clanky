@@ -12,8 +12,8 @@
   el.setAttribute('aria-hidden', 'true');
   Object.assign(el.style, {
     position: 'fixed', top: '0', right: '0', bottom: '0', width: `${W_PANEL}px`, pointerEvents: 'none',
-    background: 'linear-gradient(90deg, rgba(12,22,24,0) 0%, rgba(12,22,24,0.72) 14%, rgba(12,22,24,0.82) 100%)',
-    borderLeft: '1px solid rgba(120,255,226,0.18)', opacity: '0', transition: 'opacity 0.35s ease',
+    background: 'linear-gradient(90deg, rgba(243,235,221,0) 0%, rgba(243,235,221,0.86) 14%, rgba(243,235,221,0.94) 100%)',
+    borderLeft: '1.5px solid #2A2420', opacity: '0', transition: 'opacity 0.35s ease',
   });
   // First in the page, so the Clanky and the cards (drawn after it) are on top of it.
   const mount = () => document.body?.prepend(el);

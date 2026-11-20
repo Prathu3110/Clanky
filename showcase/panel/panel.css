@@ -1,5 +1,5 @@
 /* The panel that opens from the menu bar or tray icon. Built on the setup guide's stylesheet (fonts, colours,
-   pixel frames, buttons, switches, fields), so it's the same LED-panel world; this file only lays it out.
+   pixel frames, buttons, switches, fields), in the design tokens' light and dark windows; this file only lays it out.
    One accent fill per view: the header's update button when there is one, otherwise Ask. */
 :root {
   --gut: 16px;      /* the one inline gutter: header, pages and note */
@@ -17,7 +17,7 @@ html, body { height: 100%; background: transparent; }
 .frame {
   height: 100%; display: flex; flex-direction: column; overflow: hidden;
   background:
-    radial-gradient(circle at 50% 50%, rgba(80, 210, 190, 0.07) 0.9px, transparent 1.3px) 0 0 / 8px 8px,
+    radial-gradient(circle at 50% 50%, rgba(var(--tint), 0.07) 0.9px, transparent 1.3px) 0 0 / 8px 8px,
     var(--bg);
   color: var(--ink);
   border: 1px solid var(--line-hi);
@@ -26,19 +26,22 @@ html, body { height: 100%; background: transparent; }
 /* Above the icon (a taskbar at the bottom): it opens from its bottom edge. */
 .frame.from-bottom { transform-origin: 50% 100%; }
 
-/* Opening: a bright line at the icon's edge that opens out into the panel, like a CRT switching on. */
+/* Opening and closing: a stepped wipe from the icon's edge (design motion: open 240 ms, close in --shut, no flash).
+   The names stay crt-on/crt-off because panel.js and main.rs wait on them. */
 .frame.opening { animation: crt-on var(--open) steps(8, end) both; }
 @keyframes crt-on {
-  0% { transform: scaleY(0.012); filter: brightness(2.6); opacity: 0.4; }
-  40% { transform: scaleY(1.01); filter: brightness(1.5); opacity: 1; }
-  100% { transform: none; filter: none; opacity: 1; }
+  0% { clip-path: inset(0 0 100% 0); opacity: 0.6; }
+  100% { clip-path: inset(0 0 0 0); opacity: 1; }
 }
-/* Closing: it folds back into the line and goes dark. */
+.frame.from-bottom.opening { animation-name: crt-on-up; }
+@keyframes crt-on-up {
+  0% { clip-path: inset(100% 0 0 0); opacity: 0.6; }
+  100% { clip-path: inset(0 0 0 0); opacity: 1; }
+}
 .frame.shutting { animation: crt-off var(--shut) steps(5, end) both; pointer-events: none; }
 @keyframes crt-off {
-  0% { transform: none; filter: none; opacity: 1; }
-  60% { transform: scaleY(0.012); filter: brightness(2.6); opacity: 1; }
-  100% { transform: scaleY(0.012) scaleX(0); opacity: 0; }
+  0% { clip-path: inset(0 0 0 0); opacity: 1; }
+  100% { clip-path: inset(0 0 100% 0); opacity: 0; }
 }
 .frame.shut { opacity: 0; }
 
@@ -72,7 +75,7 @@ html, body { height: 100%; background: transparent; }
 .head { display: flex; align-items: center; gap: 8px; padding: 6px var(--gut) 6px 4px; }
 .head-text { min-width: 0; flex: 1; display: grid; }
 /* The Clanky stands on a small LED pad, like the setup guide's. */
-.avatar { flex: none; width: 100px; height: 74px; margin-inline-end: -10px; background: radial-gradient(closest-side, rgba(120, 255, 226, 0.10), transparent) 50% 92% / 70% 22% no-repeat; }
+.avatar { flex: none; width: 100px; height: 74px; margin-inline-end: -10px; background: radial-gradient(closest-side, rgba(var(--tint), 0.1), transparent) 50% 92% / 70% 22% no-repeat; }
 /* Something it says (a new look, an update; not the setup guide's .quip bubble): in the status line's place for a moment, typed in its own font. */
 .head-text .by, .head-text .saying { grid-area: 2 / 1; }
 .saying {
@@ -106,11 +109,11 @@ html, body { height: 100%; background: transparent; }
 .looktile canvas { display: block; width: 104px; height: 76px; }
 .looktile .name { font: 700 var(--t-small)/1.25 var(--mono); font-stretch: 87.5%; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
 .looktile:hover { --bc: var(--line-hi); color: var(--ink); }
-.looktile[aria-checked="true"] { --bc: var(--accent); --fill: #0a2a28; color: var(--accent); }
+.looktile[aria-checked="true"] { --bc: var(--accent); --fill: var(--well); color: var(--accent); }
 
 /* ---------- About: who made it ---------- */
 .maker { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.maker canvas { flex: none; width: 100px; height: 74px; margin-inline-start: -14px; background: radial-gradient(closest-side, rgba(120, 255, 226, 0.10), transparent) 50% 92% / 70% 22% no-repeat; }
+.maker canvas { flex: none; width: 100px; height: 74px; margin-inline-start: -14px; background: radial-gradient(closest-side, rgba(var(--tint), 0.1), transparent) 50% 92% / 70% 22% no-repeat; }
 .maker > span { min-width: 0; font: 700 var(--t-head)/1.35 var(--mono); color: var(--ink); white-space: nowrap; }
 .maker > span small { display: block; font: 400 var(--t-small)/1.35 var(--mono); color: var(--ink-3); }
 
@@ -127,13 +130,13 @@ html, body { height: 100%; background: transparent; }
   --bc: transparent; --fill: transparent;
   transition: color 120ms steps(2, end);
 }
-.navi:hover { color: var(--ink); --fill: rgba(120, 255, 226, 0.05); }
-.navi[aria-current="page"] { color: var(--accent); font-weight: 700; --fill: #0a2a28; --bc: var(--accent); }
+.navi:hover { color: var(--ink); --fill: rgba(var(--tint), 0.05); }
+.navi[aria-current="page"] { color: var(--accent); font-weight: 700; --fill: var(--well); --bc: var(--accent); }
 /* Needs you (an update, no account): one small LED at the end, nothing more. */
 .navi .dot { display: none; width: 6px; height: 6px; margin-inline-start: auto; background: var(--accent); }
 .navi.flag .dot { display: block; }
 .navi.ping { animation: navi-ping 240ms steps(3, end); }
-@keyframes navi-ping { 0% { filter: brightness(1.9); } 100% { filter: none; } }
+@keyframes navi-ping { 0% { background: var(--accent); } 100% { background: transparent; } }
 
 /* ---------- panes ---------- */
 /* Pages fit the window: long lists show a page at a time with arrows in the page's footer. A page of settings taller
@@ -210,7 +213,7 @@ html, body { height: 100%; background: transparent; }
 .item .text small { display: block; font-size: var(--t-small); line-height: 1.3; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; }
 .item.ask .text { color: var(--ink-2); }
 .item.bad .text, .item .text small.late { color: var(--danger); }
-.mark { width: 8px; height: 8px; justify-self: center; background: #1e3f3d; }
+.mark { width: 8px; height: 8px; justify-self: center; background: var(--well); }
 
 /* ---------- What's new: one change per row, the title and its kind on one line, the date, then a line or two ---------- */
 .item.wn { grid-template-columns: minmax(0, 1fr); align-items: start; gap: 3px; padding: 8px 0; }
@@ -221,11 +224,11 @@ html, body { height: 100%; background: transparent; }
 .wn-kind.k-new { background: var(--accent); color: var(--accent-ink); }
 .wn-kind.k-improved { background: var(--line-hi); color: var(--ink); }
 .wn-kind.k-fixed { background: var(--line); color: var(--ink); }
-.wn-kind.k-removed { background: #12302e; color: var(--ink-2); }
+.wn-kind.k-removed { background: var(--well); color: var(--ink-2); }
 .wn-date { font-size: var(--t-small); line-height: 1.3; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .wn-text { margin: 0; min-height: 2.8em; font-size: var(--t-small); line-height: 1.4; color: var(--ink-2); } /* two lines kept, so every row is one height */
 /* This update's changes: lit like the current page in the sidebar, the rest as they were. */
-.item.wn.fresh { padding-inline: 10px; background: #0a2a28; color: var(--ink); border-bottom-color: var(--bg); }
+.item.wn.fresh { padding-inline: 10px; background: var(--well); color: var(--ink); border-bottom-color: var(--bg); }
 .item.did .mark { background: var(--accent-lo); }
 .item.bad .mark { background: var(--danger); }
 /* A question: two stacked bars, like a quote, instead of a dot. */
@@ -247,7 +250,7 @@ html, body { height: 100%; background: transparent; }
 .arm > .yes { opacity: 0; }
 .arm[aria-pressed="true"] > .no { opacity: 0; }
 .arm[aria-pressed="true"] > .yes { opacity: 1; color: var(--accent-ink); background: var(--danger); animation: arm-blink 600ms steps(2, end) 2; }
-@keyframes arm-blink { 50% { background: #ff8a78; } }
+@keyframes arm-blink { 50% { background: var(--danger); } }
 
 /* Memory and commitment rows: no marker, just the text and its tick (done) and X (forget, drop). Pressed, a tick or
    X becomes Confirm in place and the row's other one folds away; both ease in and out. */
@@ -260,7 +263,7 @@ html, body { height: 100%; background: transparent; }
 }
 .ibtn:first-child { margin-inline-start: 0; }
 .ibtn:hover { color: var(--accent-hi); }
-.ibtn.danger:hover { color: #ffcbc2; }
+.ibtn.danger:hover { color: var(--danger); }
 .ibtn > span { display: inline-flex; align-items: center; overflow: hidden; transition: max-width .2s var(--ease), opacity .16s var(--ease), padding .2s var(--ease); }
 .ibtn > .no { max-width: 14px; }
 .ibtn > .no svg { display: block; flex: none; }
@@ -332,11 +335,11 @@ html, body { height: 100%; background: transparent; }
 /* Centred on the 4px track: (4 - 12) / 2. */
 .effort-range::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none; width: 12px; height: 12px; margin-top: -4px; border: 0; border-radius: 0;
-  background: var(--accent); box-shadow: 0 0 8px rgba(120, 255, 226, 0.6); cursor: pointer;
+  background: var(--accent); box-shadow: 0 0 8px rgba(var(--tint), 0.12); cursor: pointer;
 }
 .effort-range::-moz-range-track { height: 4px; background: var(--line); }
 .effort-range::-moz-range-progress { height: 4px; background: var(--accent); }
-.effort-range::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 0; background: var(--accent); box-shadow: 0 0 8px rgba(120, 255, 226, 0.6); cursor: pointer; }
+.effort-range::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 0; background: var(--accent); box-shadow: 0 0 8px rgba(var(--tint), 0.12); cursor: pointer; }
 .effort-range:focus-visible::-webkit-slider-thumb { background: var(--ink); box-shadow: 0 0 0 2px var(--bg); }
 .effort-range:focus-visible::-moz-range-thumb { background: var(--ink); box-shadow: 0 0 0 2px var(--bg); }
 /* The stops' names under their stops (--i of --n): the first and last flush with the ends of the track, the others
@@ -354,7 +357,7 @@ html, body { height: 100%; background: transparent; }
 
 /* Tooltip: a small LED-framed card against its control, dissolving in like the rows. */
 .tip {
-  position: fixed; z-index: 20; width: max-content; padding: 6px 10px; --bc: var(--line-hi); --fill: #08201f;
+  position: fixed; z-index: 20; width: max-content; padding: 6px 10px; --bc: var(--line-hi); --fill: var(--well);
   font-size: var(--t-small); line-height: 1.45; color: var(--ink);
 }
 .tip[hidden] { display: none; }

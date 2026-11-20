@@ -698,20 +698,20 @@ fn intro_at_tray(app: &AppHandle, tray: Option<tauri::Rect>, text: &str) {
 
 // ---------- menu bar icon ----------
 
-/// The "Wave" icon: the Sidekick waving a floating mitt, as a 12×12 LED grid.
+/// The Clanky ghost (design/sprites), as a 12×12 LED grid: dome, two eyes, a scalloped hem.
 const TRAY_ART: [&str; 12] = [
-    "............",
-    "..........#.",
-    ".........###",
-    "..........#.",
-    "..####......",
-    ".######.....",
-    "##.##.##....",
-    "##.##.##....",
-    "########....",
-    ".######.....",
-    "..####......",
-    "............",
+    "...######...",
+    "..########..",
+    ".##########.",
+    ".##########.",
+    ".###.##.###.",
+    ".###.##.###.",
+    ".##########.",
+    ".##########.",
+    ".##########.",
+    ".##########.",
+    ".##########.",
+    ".#.##..##.#.",
 ];
 
 /// Renders the grid as LED dots (2 px on a 3 px pitch, 36 px = 18 pt at 2x). Black on transparent, used

@@ -1,0 +1,33 @@
+{"text":"Click the blue button in the toolbar","kinds":["computer"]}
+{"text":"can you open the Slack app and read my messages","kinds":["computer"]}
+{"text":"what's on my screen right now?","kinds":["computer"]}
+{"text":"type my address into the form","kinds":["computer"]}
+{"text":"scroll down a bit","kinds":["computer"]}
+{"text":"take a screenshot","kinds":["computer"]}
+{"text":"switch to the Safari browser","kinds":["computer"]}
+{"text":"fix the bug in my login function","kinds":["code"]}
+{"text":"write a python script that renames these","kinds":["code"]}
+{"text":"run the tests please","kinds":["code"]}
+{"text":"git push my changes","kinds":["code"]}
+{"text":"tidy up the files in my downloads folder","kinds":["code"]}
+{"text":"why does cargo say the lockfile is out of date","kinds":["code"]}
+{"text":"add a dark mode feature to my website","kinds":["code"]}
+{"text":"draw a diagram of how DNS works","kinds":["draw"]}
+{"text":"make a mind map of my week","kinds":["draw"]}
+{"text":"visualize my spending","kinds":["draw"]}
+{"text":"what is the latest news about the election","kinds":["web"]}
+{"text":"search the web for dentist chairs","kinds":["web"]}
+{"text":"compare prices for the M3 MacBook Air online","kinds":["web"]}
+{"text":"open the Figma app and draw a flowchart of the checkout","kinds":["computer","draw"]}
+{"text":"send an agent to research dentist chairs","kinds":["agents"]}
+{"text":"send an agent to tidy my desktop","kinds":["agents"]}
+{"text":"what is an agent?","kinds":[]}
+{"text":"how are you today?","kinds":[]}
+{"text":"tell me a joke","kinds":[]}
+{"text":"what's the capital of France","kinds":[]}
+{"text":"remind me to call mum at 5","kinds":[]}
+{"text":"thanks!","kinds":[]}
+{"text":"ok","kinds":[]}
+{"text":"yes, then run the tests","kinds":["code"]}
+{"text":"(Reminder: stand up)","kinds":[]}
+{"text":"","kinds":[]}

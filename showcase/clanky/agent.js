@@ -393,8 +393,10 @@
     // Bubble text: Martian Mono (0.7 em per letter), sized to the bubble's line grid.
     const fontPx = (t) => Math.round(CH * t * 0.64 * 2) / 2;
     const colW = (t) => fontPx(t) * 0.7 + 0.35;
-    const TEXT_INK = '#dcfff6', TEXT_ACCENT = '#78ffe2';
-    const T = () => clamp(k.P * 0.42, 1.4, 2.4);
+    // Body text in ink; code and links in the secondary ink (links underlined): accents never go on body text.
+    const TEXT_INK = '#2A2420', TEXT_ACCENT = '#5E5248';
+    // Fixed to the design's bubble type, 14 px on a 22 px line (fontPx 14, CH * T 22), whatever the body's size.
+    const T = () => 2.2;
     const G = R.glass;
     // Padding inside a bubble. The thinking tag is slim, one line, with its three dots before the words.
     const DOTS_W = 24;
@@ -623,13 +625,13 @@
         });
       }
       const tail = speechTail > 0.05 ? { side, at: across ? tip[0] : tip[1], to: tip, w: 14 * speechTail } : null;
-      G.chrome(ctx, f.x, f.y, f.w, f.h, { tail });
-      // A light running along the top edge while words arrive or it waits for typing.
-      const streaming = bb.kind !== 'thought' && (bb.shown < bb.text.length || (bb.input?.focused && !bb.input.processing && !bb.closing));
-      if (streaming && f.w > 40) {
-        const run = f.w - 32, u = pen.reduced ? 0.4 : (now * 0.8) % 1;
-        ctx.save(); ctx.shadowColor = G.rgba(G.ACC, 0.8); ctx.shadowBlur = 6; ctx.fillStyle = G.HOT;
-        ctx.fillRect(f.x + 8 + run * u, f.y - 0.25, 16, 1.5); ctx.restore();
+      G.chrome(ctx, f.x, f.y, f.w, f.h, { tail, strip: bb.kind === 'speech' ? R.ghost?.accent() ?? G.ACC : null });
+      // More text coming: a blinking pixel ▼ in the bottom right corner while words arrive.
+      const streaming = bb.kind === 'speech' && bb.shown < bb.text.length && !bb.closing;
+      if (streaming && f.w > 40 && (pen.reduced || Math.floor(now * 2.5) % 2 === 0)) {
+        const ax = Math.round(f.x + f.w - 14), ay = Math.round(f.y + f.h - 9);
+        ctx.fillStyle = G.INK;
+        [[0, 6], [1, 4], [2, 2]].forEach(([dy, w]) => ctx.fillRect(ax + (6 - w) / 2, ay + dy * 1.5, w, 1.5));
       }
       // Thinking: three small squares, one lit at a time; before the words when there are any.
       if (bb.kind === 'thought' && bb.cloud.x > 0.3) {
@@ -637,18 +639,18 @@
         for (let i = 0; i < 3; i++) {
           const on = i === lit;
           ctx.save();
-          if (on) { ctx.shadowColor = G.rgba(G.ACC, 0.8); ctx.shadowBlur = 6; } else ctx.globalAlpha *= 0.55;
-          ctx.fillStyle = on ? G.ACC : G.MID; ctx.fillRect(Math.round(dx + i * 10), Math.round(cy - 2 - (on ? 1.5 : 0)), 4, 4);
+          if (!on) ctx.globalAlpha *= 0.35;
+          ctx.fillStyle = G.INK; ctx.fillRect(Math.round(dx + i * 10), Math.round(cy - 2 - (on ? 1.5 : 0)), 4, 4);
           ctx.restore();
         }
       }
-      // Listening: the voice level as thin glowing bars under the transcript, a sweep while it's finished off.
+      // Listening: the voice level as thin bars under the transcript, a sweep while it's finished off.
       if (bb.input?.listen) {
         const inp = bb.input, mh = METER * P, x0 = f.x + padX(bb), x1 = f.x + f.w - padX(bb), bot = f.y + f.h - padY(bb);
         const n = Math.max(1, Math.floor((x1 - x0) / 5));
         while (inp.levels.length < n) inp.levels.unshift(0);
         if (inp.levels.length > n) inp.levels.splice(0, inp.levels.length - n);
-        ctx.save(); ctx.shadowColor = G.rgba(G.ACC, 0.6); ctx.shadowBlur = 4; ctx.fillStyle = G.ACC;
+        ctx.save(); ctx.fillStyle = G.INK;
         for (let i = 0; i < n; i++) {
           let v = inp.levels[i];
           if (inp.processing) v = 0.15 + 0.7 * Math.max(0, Math.sin(now * 9 - i * 0.55)) ** 3;
@@ -677,11 +679,11 @@
         const bx = f.x + f.w - 7, top = f.y + padY(bb), len = Math.max(4, f.h - padY(bb) * 2);
         const total = bb.lines.length, frac = bb.rows / total, pos = bb.scroll.x / Math.max(1, total - bb.rows);
         const tl = Math.max(6, len * frac), t0 = top + (len - tl) * clamp(pos, 0, 1);
-        ctx.fillStyle = G.rgba(G.ACC, 0.15); ctx.fillRect(bx, top, 2, len);
-        ctx.fillStyle = G.ACC; ctx.fillRect(bx, t0, 2, tl);
+        ctx.fillStyle = G.OAT2; ctx.fillRect(bx, top, 2, len);
+        ctx.fillStyle = G.INK_SOFT; ctx.fillRect(bx, t0, 2, tl);
         if (bb.ended && bb.scroll.x < total - bb.rows - 0.05) {
           const cx = f.x + f.w - 20, cy = f.y + f.h - 7 + (Math.sin(now * 6) > 0 ? 1 : 0);
-          ctx.fillStyle = G.HOT;
+          ctx.fillStyle = G.INK;
           for (const [dx, dy] of [[-4, -2], [-2, 0], [0, 2], [2, 0], [4, -2]]) ctx.fillRect(cx + dx - 1, cy + dy - 1, 2, 2);
         }
       }
@@ -696,7 +698,8 @@
       const P = k.P, t = T(), dpr = env.dpr || 1, cw = colW(t), lh = CH * t;
       const fade = bb.closing ? clamp(1 - bb.closing / 0.25, 0, 1) : clamp((bb.age - 0.08) / 0.2, 0, 1);
       if (fade <= 0 || bb.pop.x < 0.6) return;
-      const ix = fr.x + padX(bb) + dotsDx(bb), iy = fr.y + padY(bb);
+      // On whole device pixels: a part-pixel spot resamples the type and blurs it.
+      const ix = Math.round((fr.x + padX(bb) + dotsDx(bb)) * dpr) / dpr, iy = Math.round((fr.y + padY(bb)) * dpr) / dpr;
       const iw = bb.cols * cw, ih = bb.rows * lh;
       const pw = Math.ceil(iw * dpr) + 2, phh = Math.ceil(ih * dpr) + 2;
       if (tcan.width !== pw || tcan.height !== phh) { tcan.width = pw; tcan.height = phh; }
@@ -721,7 +724,7 @@
       };
       let curFont = '';
       tctx.textBaseline = 'middle'; tctx.textAlign = 'left';
-      const ink = dim ? css(PAL[L - 2], 0.9) : TEXT_INK, accent = dim ? ink : TEXT_ACCENT;
+      const ink = dim ? css([94, 82, 72], 0.9) : TEXT_INK, accent = dim ? ink : TEXT_ACCENT;
       for (let li = first; li <= last; li++) {
         const line = lines[li], cy = (li - s0 + 0.5) * lh;
         // Lines scrolling past the top or bottom fade out instead of being cut in half.
@@ -751,13 +754,13 @@
           }
           const em = emojiAt(line.s, j);
           const ch = em ? em.cluster : line.s[j];
-          // Each new letter lands white, then settles to the text colour (code and links in the accent). It lands
+          // Each new letter lands in the secondary ink, then settles to the text colour (code and links in the accent). It lands
           // in place: a little hop per letter made the line being read shake while it streamed in.
           const st = ph ? 0 : bb.sty?.[idx] ?? 0, f = fontFor(st);
           if (f !== curFont) { tctx.font = f; curFont = f; }
           const age = ph ? 9 : now - (bb.at[idx] ?? 0), x = j * cw + (em ? cw * 0.15 : 0), y = cy;
           const marked = md && st & (md.CODE | md.LINK);
-          tctx.fillStyle = age < 0.12 ? '#ffffff' : marked ? accent : ink;
+          tctx.fillStyle = age < 0.12 ? TEXT_ACCENT : marked ? accent : ink;
           tctx.fillText(ch, x, y);
           if (md && st & md.LINK) tctx.fillRect(x, cy + lh * 0.36, cw, Math.max(1, t * 0.4));
           if (em) j += em.n - 1;
@@ -809,23 +812,23 @@
       ctx.globalAlpha *= alpha;
       // It lands in three small steps.
       ctx.translate(0, pen.reduced ? 0 : -Math.round((1 - u) * 3) * 3);
-      G.chrome(ctx, g.x, g.y, g.w, g.h, { edge: fail ? G.CORAL : G.ACC });
+      G.chrome(ctx, g.x, g.y, g.w, g.h, { edge: fail ? G.CORAL : null });
       const sx = g.x + 20, sy = g.y + g.h / 2;
       if (!st.status) {
         const head = Math.floor(now * 14) % 8;
         for (let i = 0; i < 8; i++) {
           const a = (i / 8) * Math.PI * 2 - Math.PI / 2, d = (head - i + 8) % 8;
-          ctx.fillStyle = d === 0 ? G.HOT : d < 3 ? G.ACC : G.DEEP;
+          ctx.fillStyle = d === 0 ? G.TANGERINE : d < 3 ? G.INK_SOFT : G.OAT2;
           ctx.fillRect(Math.round(sx + Math.cos(a) * 5) - 1, Math.round(sy + Math.sin(a) * 5) - 1, 2, 2);
         }
         // Its progress along the bottom edge when known, else a light running along it.
         const run = g.w - 32;
-        ctx.save(); ctx.shadowColor = G.rgba(G.ACC, 0.8); ctx.shadowBlur = 6; ctx.fillStyle = G.ACC;
+        ctx.save(); ctx.fillStyle = G.TANGERINE;
         if (st.p != null) ctx.fillRect(g.x + 16, g.y + g.h - 1.5, run * clamp(st.p, 0, 1), 1.5);
         else ctx.fillRect(g.x + 16 + (run - 14) * (pen.reduced ? 0.3 : (now * 0.9) % 1), g.y + g.h - 1.5, 14, 1.5);
         ctx.restore();
       } else if (!fail) {
-        ctx.fillStyle = G.ACC;
+        ctx.fillStyle = G.INK;
         for (const [dx, dy] of [[-4, 0], [-3, 1], [-2, 2], [-1, 3], [0, 4], [1, 3], [2, 2], [3, 1], [4, 0], [5, -1], [6, -2]]) ctx.fillRect(sx + dx - 1, sy + dy - 1, 2, 2);
       } else {
         ctx.fillStyle = G.CORAL;
@@ -833,7 +836,7 @@
       }
       let tx = g.x + 36;
       if (verb) tx += G.typed(ctx, verb, tx, sy + 0.5, TAG_VERB, G.DIM, (st.age - 0.08) / 0.25) + 7;
-      G.typed(ctx, thing, tx, sy + 0.5, TAG_THING, fail ? G.CORAL : G.TEXT, (st.age - 0.2) / 0.35);
+      G.typed(ctx, thing, tx, sy + 0.5, TAG_THING, fail ? G.NOTE : G.TEXT, (st.age - 0.2) / 0.35);
       ctx.restore();
     };
 
@@ -1086,6 +1089,16 @@
       ghost: () => pen.held,
       // A bubble is up: emotes keep their gestures but drop icons and particles, so the text stays readable.
       calm: () => !!(b && !b.closing),
+      // The ghost's sprite state (ghost.js) for what this layer is doing, or null when it isn't doing anything.
+      state: () => {
+        if (pen.held) return 'pointing';
+        if (b?.input?.listen) return 'listening';
+        if (b?.input?.choices) return 'waiting';
+        if (tool) return tool.status === 'fail' ? 'error' : tool.status === 'ok' ? 'done' : tool.target ? 'pointing' : 'working';
+        if (b?.kind === 'thought' && !b.closing) { b.thinkSince ??= now; return now - b.thinkSince > 8 ? 'long-wait' : 'thinking'; }
+        if (b?.kind === 'speech' && !b.closing && (R.voiceOut?.playing?.() || b.shown < b.text.length)) return 'talking';
+        return null;
+      },
       hit: (x, y) => hitBubble(b, x, y),
       press: (x, y) => {
         if (!b) return;
@@ -1118,7 +1131,7 @@
       },
     };
     // The voice's feeling (voice-out.js feel()) on the face while it talks: the eyes (the kit's face moods), the brows
-    // and the mouth between words. Every look draws these its own way (JARVIS, with no face, by its heart and a tremor).
+    // and the mouth between words. The ghost shows them through its sprite states.
     const FEEL = {
       joy: { face: 'happy', rest: 'grin' },
       laugh: { face: 'happy', brow: 'raised', rest: 'grin' },

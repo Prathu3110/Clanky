@@ -1,6 +1,7 @@
-// The chosen sidekick: the LED matrix dither blob, without the drips, with the agent layer on top.
+// The sidekick: the Clanky ghost (ghost.js) with the agent layer on top. The palette is the design tokens' neutrals
+// (ink, ink-3, oat-soft, oat) and tangerine, for what the agent layer and particles draw on the pixel grid.
 Clanky.register(Clanky.ditherKit({
-  id: 'sidekick', label: 'Sidekick', matrix: true, pixel: 1.3, glow: 0.55, speed: 80,
-  pal: [[4, 16, 18], [14, 92, 96], [40, 196, 184], [120, 255, 226], [230, 255, 250]],
+  id: 'sidekick', label: 'Clanky', pixel: 1.3, glow: 0, speed: 80,
+  pal: [[42, 36, 32], [74, 64, 56], [201, 189, 173], [243, 235, 221], [242, 166, 90]],
   plugin: (kit) => Clanky.agentPlugin?.(kit) ?? null,
 }));

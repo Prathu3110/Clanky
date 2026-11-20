@@ -2,66 +2,66 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_VOICE } from '../fish.mjs';
+import { GEMINI_VOICES } from '../gemini.mjs';
 
-// Every look the app offers has a drawing and its voice; the setup guide offers the same looks.
+// One character, the Clanky ghost; the personality picks its tone, ghost colour and voice.
 const src = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
-const side = src('../sidekick.mjs'), guide = src('../../../onboarding/onboarding.js');
-const looks = [...side.slice(side.indexOf('const LOOKS = ['), side.indexOf('];', side.indexOf('const LOOKS = ['))).matchAll(/\['(\w+)', '([^']+)', (DEFAULT_VOICE|'(\w+)')\]/g)];
-assert.deepEqual(looks.map((m) => m[1]), ['classic', 'jarvis', 'glayos', 'ultren', 'anime', 'sarah', 'adrian', 'rita']);
-const voices = Object.fromEntries(looks.map((m) => [m[1], m[4] ?? null]));
-assert.equal(voices.classic, null, 'Clanky uses DEFAULT_VOICE');
-assert.equal(DEFAULT_VOICE, '2680da81de8348a68e1f4dbaa79272f1');
-assert.equal(voices.jarvis, 'e13fa398a7f445a685316a3de6089ce7');
-// Regression: Clanky spoke with JARVIS's voice (the default was JARVIS's ID).
-assert.equal(new Set([DEFAULT_VOICE, ...Object.values(voices).filter(Boolean)]).size, 8, 'every look has its own voice');
+const side = src('../sidekick.mjs');
+const block = side.slice(side.indexOf('const PERSONALITIES = ['), side.indexOf('];', side.indexOf('const PERSONALITIES = [')) + 2);
+const PERSONALITIES = new Function('DEFAULT_VOICE', `${block}; return PERSONALITIES;`)(DEFAULT_VOICE);
+assert.deepEqual(PERSONALITIES.map((p) => p[0]), ['classic', 'butler', 'sage', 'sassy']);
+assert.deepEqual(PERSONALITIES.map((p) => p[1]), ['Classic', 'Butler', 'Teacher', 'Sassy']);
+for (const [id, , tone, fish, gemini, hi] of PERSONALITIES) {
+  assert.ok(tone && tone.length > 10, `${id} has a tone`);
+  assert.match(fish, /^[0-9a-f]{32}$/, `${id} has a Fish Audio voice`);
+  assert.ok(GEMINI_VOICES.some((x) => x.id === gemini), `${id}'s ${gemini} is a Gemini voice`);
+  assert.ok(hi, `${id} has a greeting`);
+}
+assert.equal(PERSONALITIES[0][3], DEFAULT_VOICE, 'Classic speaks in the default voice');
+assert.equal(new Set(PERSONALITIES.map((p) => p[3])).size, 4, 'each personality has its own Fish Audio voice');
+assert.equal(new Set(PERSONALITIES.map((p) => p[4])).size, 4, 'and its own Gemini voice');
 assert.ok(!/config\.fishVoice/.test(side), 'a saved fishVoice (the old JARVIS default) is never used');
-assert.equal(voices.anime, 'd8f3b4c1199f4568a767ec54112d2b17');
-assert.equal(voices.sarah, '933563129e564b19a115bedd57b7406a');
-assert.equal(voices.adrian, 'bf322df2096a46f18c579d0baa36f41d');
-assert.equal(voices.rita, '84aadb575ed74e9aa44ba7ab8619d1a1');
-assert.equal(voices.ultren, '06cfdb3653a4496983d6ad77f98cc184');
-assert.equal(voices.glayos, 'ee885900b0874d12b1c3439d1e56cc95');
-for (const [, id, label] of looks) assert.ok(guide.includes(`['${id}', '${label}']`), `the setup guide offers ${label}`);
-// Each look greets you in its voice when picked, with the words Settings and the setup guide show.
-{
-  const obj = (text, name) => new Function(`return ${text.match(new RegExp(`const ${name} = (\\{[^}]*\\})`))[1]}`)();
-  const said = obj(side, 'LOOK_GREETINGS');
-  assert.deepEqual(Object.keys(said), looks.map((m) => m[1]), 'a greeting for every look');
-  assert.deepEqual(obj(src('../../../panel/panel.js'), 'QUIPS'), said, 'Settings shows the spoken greeting');
-  assert.deepEqual(obj(guide, 'LOOK_QUIPS'), said, 'the setup guide shows the spoken greeting');
-  const set = side.slice(side.indexOf('function setLook('), side.indexOf('\n}\n', side.indexOf('function setLook(')));
-  assert.match(set, /if \(changed && VOICE_ON\(\) && !busy\)/, 'only for a new look, with voice on, and not over a reply');
-  assert.match(set, /v\.say\(LOOK_GREETINGS\[l\]\)/);
-  // Each talks its own way, in the full prompt and in Lite mode, and the prompt names every look.
-  assert.deepEqual(Object.keys(obj(side, 'LOOK_STYLE')), looks.map((m) => m[1]), 'a talking style for every look');
-  // Both prompts take the picked personality, else the look's own style.
-  assert.match(side, /const styleNow = \(\) => PERSONALITIES\.find\(\(\[id\]\) => id === config\.personality\)\?\.\[2\] \?\? LOOK_STYLE\[config\.look\] \?\? LOOK_STYLE\.classic;/);
-  assert.match(side, /Personality: \$\{styleNow\(\)\}/);
-  assert.match(side, /style: styleNow\(\),/);
-  assert.match(side, /your name and your voice: \$\{LOOKS\.slice\(0, -1\)/);
-}
+// Both prompts take the personality's tone; it greets you in its voice only when it changes, voice on, not over a reply.
+assert.match(side, /Personality: \$\{styleNow\(\)\}/);
+assert.match(side, /style: styleNow\(\),/);
+const set = side.slice(side.indexOf('function setPersonality('), side.indexOf('\n}\n', side.indexOf('function setPersonality(')));
+assert.match(set, /if \(changed && VOICE_ON\(\) && !busy\)/);
+assert.match(set, /v\.say\(persona\(\)\[5\]\)/);
+assert.match(set, /ui\(\{ kind: 'personality', personality: p \}\)/, 'the overlay recolours the ghost');
+// Every personality has a ghost colour on the overlay.
+const ghost = src('../../../clanky/ghost.js');
+const colours = new Function(`return ${ghost.match(/const PERSONA_GHOST = (\{[^}]*\})/)[1]}`)();
+assert.deepEqual(Object.keys(colours), PERSONALITIES.map((p) => p[0]));
+console.log('personality tests: passed');
 
-// The characters draw at every size without throwing, inside their area, and the sprites are well formed.
-const warns = [];
-globalThis.window = { Clanky: {} };
-const warn = console.warn; console.warn = (m) => warns.push(m);
-new Function(src('../../../clanky/people.js'))();
-console.warn = warn;
-assert.deepEqual(warns, [], 'every sprite row is half or whole width');
-const P = window.Clanky.people;
-const th = () => 0.5;
-// ken: Ken Kai, on the About page (drawn the same way, though not a look you can pick).
-for (const who of ['anime', 'sarah', 'adrian', 'rita', 'ultren', 'glayos', 'ken']) for (const size of ['default', 'small', 'cursor']) for (const state of [{}, { mode: 'talk', voice: 0.9 }, { happy: 1 }, { open: 0 }, { dizzy: 1 }, { sleepy: 1 }, { act: 'hype', actA: 0.2 }, { act: 'upset', actA: 0.1 }]) {
-  const cells = [];
-  const k = { put: (x, y, l) => { assert.ok(Number.isInteger(x) && Number.isInteger(y) && l >= 0 && l <= 4, `${who} ${size} cell`); cells.push([x, y]); }, L: 4, th };
-  const st = { t: 1, mode: null, voice: null, act: null, actA: 0, open: 1, look: [0.5, -0.3], vx: 0, sq: 0, wide: 0, dizzy: 0, happy: 0, sleepy: 0, mouth: null, brow: null, ...state };
-  if (size === 'cursor') P[who].cursor(k, 50, 50, 46, 43, st); else P[who].body(k, 50, 50, size === 'small' ? 6.4 : 12.75, st);
-  assert.ok(cells.length > 40, `${who} ${size} draws`);
-  const span = Math.max(...cells.map(([x]) => x)) - Math.min(...cells.map(([x]) => x));
-  assert.ok(span < (size === 'default' ? 40 : 24), `${who} ${size} stays its size (${span})`);
+// The sprite sheets match the manifest: 16 states, a time per frame, 4 ghosts with light and dark sheets of 128x512.
+{
+  const dir = '../../../clanky/ghost/', man = JSON.parse(src(`${dir}clanky-sprites.json`));
+  assert.equal(man.states.length, 16);
+  man.states.forEach((s, i) => { assert.equal(s.row, i); assert.equal(s.ms.length, s.frames, `${s.id} has a time per frame`); assert.ok(s.frames <= man.columns); });
+  const size = (f) => { const b = readFileSync(fileURLToPath(new URL(`${dir}${f}`, import.meta.url))); return [b.readUInt32BE(16), b.readUInt32BE(20)]; };
+  for (const g of Object.values(colours)) for (const v of ['light', 'dark']) assert.deepEqual(size(`clanky-${g}-${v}.png`), [128, 512], `${g} ${v}`);
+  for (const v of ['light', 'dark']) assert.deepEqual(size(`clanky-cursor-${v}.png`), [20, 40]);
+  // ghost.js picks each frame by its own time, and frame 0 under reduced motion.
+  globalThis.window = { Clanky: {} };
+  globalThis.document = { currentScript: { src: 'file:///x/clanky/ghost.js' }, createElement: () => ({ getContext: () => ({}) }) };
+  globalThis.location = { href: 'file:///x/' };
+  globalThis.matchMedia = () => ({ matches: false });
+  globalThis.Image = class { };
+  globalThis.fetch = () => Promise.resolve({ json: () => man });
+  new Function(ghost)();
+  await new Promise((r) => setTimeout(r, 10));
+  const G = window.Clanky.ghost;
+  assert.ok(G.ready());
+  assert.equal(G.frame('idle', 0.1), 0);
+  assert.equal(G.frame('idle', 0.6), 1);
+  assert.equal(G.frame('idle', 1.55), 3, 'the blink frame is short (140 ms after 3 x 500)');
+  assert.equal(G.frame('idle', 1.65), 0, 'and it loops');
+  assert.equal(G.frame('idle', 0.6, true), 0, 'reduced motion holds frame 0');
+  G.setPersonality('butler'); assert.equal(G.color, 'cobalt');
+  G.setPersonality('nobody'); assert.equal(G.color, 'ivory');
+  console.log('ghost sprite tests: passed');
 }
-assert.ok(!looks.some((m) => m[1] === 'ken'), 'Ken is not a pickable look');
-console.log('looks tests: passed');
 
 // Regression: a selected stage canvas showed as a grey box around the Clanky (WebKit tints selected canvases).
 assert.match(src('../../../desktop.html'), /canvas \{[^}]*-webkit-user-select: none; user-select: none;[^}]*\}/);
@@ -73,28 +73,9 @@ assert.match(src('../../../desktop.html'), /canvas \{[^}]*-webkit-user-select: n
   assert.match(rel, /if \(pen\.follow && presence\.ptr\) station\.byCursor = presence\.ptr\.slice\(\)/, 'release() goes back to following');
 }
 
-// The bubbles, tags and step list draw with glass.js, so the overlay loads it before them.
+// The bubbles, tags and step list draw with glass.js, and the ghost with ghost.js, so the overlay loads them first.
 {
   const page = src('../../../desktop.html'), at = (f) => page.indexOf(`clanky/${f}`);
   assert.ok(at('glass.js') > 0 && at('glass.js') < at('agent.js') && at('glass.js') < at('agent-cards.js'), 'desktop.html loads glass.js before agent.js and agent-cards.js');
-}
-
-// Regression: the hands trailed behind the body when it moved fast (they sprang after screen points, not body ones).
-{
-  const kit = src('../../../clanky/10-dither.js');
-  assert.match(kit, /spring\(h\.o, tg\[0\] \* R, tg\[1\] \* R/, 'hands spring in the body\'s own space');
-  assert.match(kit, /h\.y = m\.y \+ oy \+ h\.o\.y/, 'and ride its hop once');
-  assert.match(kit, /lerp\(sx, bx \+ h\.o\.x, arms\)/, 'hands are drawn from where the body is drawn');
-}
-
-// Regression: the cheer (hype) stuttered on the characters: the kit's hop plus one of their own at another rate.
-for (const who of ['anime', 'sarah', 'adrian', 'rita', 'ultren', 'glayos']) {
-  const tops = new Set();
-  for (const actA of [0, 0.1, 0.2, 0.3, 0.45]) {
-    let top = Infinity;
-    const st = { t: 1, mode: null, voice: null, act: 'hype', actA, open: 1, look: [0, 0], vx: 0, sq: 0, wide: 0, dizzy: 0, happy: 1, sleepy: 0, mouth: null, brow: null };
-    P[who].body({ put: (x, y) => { top = Math.min(top, y); }, L: 4, th }, 50, 50, 12.75, st);
-    tops.add(top);
-  }
-  assert.equal(tops.size, 1, `${who} doesn't hop on its own while cheering (the kit moves it)`);
+  assert.ok(at('ghost.js') > 0 && at('ghost.js') < at('12-sidekick.js'), 'desktop.html loads ghost.js before the sidekick');
 }

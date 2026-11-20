@@ -2,13 +2,13 @@
 // of popping up beside the cursor.
 // A black capsule pours out of the notch (it starts exactly the notch's size, so it reads as the notch itself
 // growing), spreads sideways with a little spring, and drops open when there's something to read. When the turn is
-// over it folds back the same way and disappears into the notch. Inside: a small live JARVIS globe (jarvis.js, the
+// over it folds back the same way and disappears into the notch. Inside: the small live ghost (ghost.js, the
 // same renderer as the sidekick), what it's doing, and the reply as it streams.
 // Two styles (R.notch.style): 'drop' (the default) is a capsule that pours out of the notch like water, a liquid
 // neck stretching and splitting off with a couple of droplets, floats just under the notch and plays with the cursor
 // (the lens watches it, a click folds the reply away or opens it again), then rises back and melts
 // into the notch the same way. 'spread' widens sideways out of the notch instead.
-// The lens shows whichever look is picked (JARVIS's globe, a person, or the Clanky blob). While it speaks, a true
+// The lens shows the ghost (ghost.js) in the personality's colour. While it speaks, a true
 // waveform of its own voice (voice-out.js samples) runs in the status slot; while it listens, one that follows the mic.
 // Screens without a notch get the same capsule hanging from the top edge, with nothing to hide in at rest.
 // The overlay is click-through, so the host asks Clanky.notchHit(x, y) whether the cursor is over it.
@@ -21,10 +21,7 @@
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
   // ---------- look ----------
-  const INK = '#dcfff6', ACCENT = '#78ffe2';
-  // The LED levels JARVIS is drawn in (12-sidekick.js), level 0 never drawn here: the capsule is the dark.
-  const PAL = [null, 'rgb(14,92,96)', 'rgb(40,196,184)', 'rgb(120,255,226)', 'rgb(230,255,250)'];
-  const L = PAL.length - 1;
+  const INK = '#F3EBDD', ACCENT = '#F2A65A'; // design tokens: oat text, tangerine accent (the capsule stays black, like the notch)
   // Fillet where the capsule meets the top edge, flowing into the screen like the notch's own corners.
   const FILLET = 9;
   // Compact: the notch plus a wing either side for the globe and the status. Open: wide enough to read.
@@ -34,9 +31,9 @@
   const DROP_ROW = 40, GAP = 15;
 
   const css = `
-.nc { --ink: ${INK}; --ink-2: rgba(220,255,246,.62); --ink-3: rgba(220,255,246,.38); --accent: ${ACCENT};
+.nc { --ink: ${INK}; --ink-2: rgba(243,235,221,.66); --ink-3: rgba(243,235,221,.42); --accent: ${ACCENT};
   --w: 180px; --h: 32px; --r: 0px; --f: ${FILLET}px;
-  --y: 0px; --gl: .4; --gr: .4; --glow-a: #6fd6ff; --glow-b: #2a6bff;
+  --y: 0px; --gl: .4; --gr: .4; --glow-a: #F3EBDD; --glow-b: #C9BDAD;
   position: fixed; top: var(--y); left: 50%; z-index: 9; box-sizing: border-box; width: var(--w); height: var(--h);
   transform-origin: 50% 0;
   /* Centred by its left edge (the host sets it from var(--w)), never a percentage translate: WebKit freezes those at
@@ -59,7 +56,7 @@
 /* Drop: a floating pill, no fillets (the neck joins it to the notch instead), a shadow to lift it off the page. */
 .nc.drop::before, .nc.drop::after { display: none; }
 .nc.drop { background: #000; border-radius: var(--r); }
-.nc.drop.compact, .nc.drop.full { box-shadow: 0 12px 32px rgba(0, 0, 0, .34), 0 2px 6px rgba(0, 0, 0, .3), 0 0 0 1px rgba(120, 190, 255, .07); }
+.nc.drop.compact, .nc.drop.full { box-shadow: 0 12px 32px rgba(0, 0, 0, .34), 0 2px 6px rgba(0, 0, 0, .3), 0 0 0 1px rgba(243, 235, 221, .08); }
 .nc.drop.hot { cursor: pointer; }
 .nc.drop.full.hot { cursor: default; }
 /* Drop: the name on the left glow, the globe in the middle like a camera lens, the status on the right glow. */
@@ -72,7 +69,7 @@
 .nc.drop .nc-body { --cw: var(--w); top: 0; left: calc(50% - var(--cw) / 2); right: auto; width: var(--cw); padding: 14px 20px 16px;
   height: var(--row); overflow: hidden; box-sizing: border-box; opacity: 0;
   background: #000; border-radius: 22px; pointer-events: none;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, .34), 0 2px 6px rgba(0, 0, 0, .3), 0 0 0 1px rgba(120, 190, 255, .07), inset 0 1px 0 rgba(255, 255, 255, .06);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, .34), 0 2px 6px rgba(0, 0, 0, .3), 0 0 0 1px rgba(243, 235, 221, .08), inset 0 1px 0 rgba(255, 255, 255, .06);
   transition: opacity .12s ease .2s, --cw .32s cubic-bezier(.4, 0, .2, 1), height .3s cubic-bezier(.4, 0, .2, 1), top .32s cubic-bezier(.4, 0, .2, 1); }
 .nc.drop.full .nc-body { --cw: var(--bw, 440px); top: calc(var(--row) + 8px); height: var(--bh, auto); opacity: 1; pointer-events: auto;
   transition: opacity .1s ease, --cw .44s cubic-bezier(.22, 1, .36, 1), height .4s cubic-bezier(.22, 1, .36, 1), top .52s cubic-bezier(.3, 1.25, .5, 1); }
@@ -81,7 +78,7 @@
 /* The pill (its black, glow and contents) stays above the card while it slides out from under it. */
 .nc.drop .nc-skin, .nc.drop .nc-row { z-index: 1; }
 .nc.drop .nc-skin { background: #000; }
-.nc.drop .nc-globe { width: 30px; height: 30px; border-radius: 50%; background: radial-gradient(circle, #0b1626 0, #000 72%);
+.nc.drop .nc-globe { width: 32px; height: 32px; border-radius: 50%; background: radial-gradient(circle, #0b1626 0, #000 72%);
   box-shadow: 0 0 0 2px #070a12, 0 0 0 3.5px rgba(255, 255, 255, .08), inset 0 0 6px #000; }
 
 /* The concave corners either side, so the capsule flows out of the top edge instead of sitting under it. */
@@ -121,14 +118,15 @@
 .nc:not(.drop) .nc-glow.r { right: calc(var(--f) - var(--row) * 1.5); }
 /* Each state has its colour: listening cyan, thinking indigo, responding blue, waiting for an OK a calm teal,
    trouble amber. The colours ease from one to the next (registered properties, see @property below). */
-.nc[data-mode="listen"] { --glow-a: #7ff3ff; --glow-b: #1fa8ff; }
-.nc[data-mode="think"], .nc[data-mode="tool"] { --glow-a: #a9b6ff; --glow-b: #5a4dff; }
-.nc[data-mode="ask"] { --glow-a: #8ff5e0; --glow-b: #1fb5a0; }
-.nc[data-mode="error"] { --glow-a: #ffcf86; --glow-b: #ff6a2f; }
-@property --glow-a { syntax: '<color>'; inherits: true; initial-value: #6fd6ff; }
-@property --glow-b { syntax: '<color>'; inherits: true; initial-value: #2a6bff; }
+.nc[data-mode="listen"] { --glow-a: #A9CBE3; --glow-b: #6F9BBF; }
+.nc[data-mode="think"] { --glow-a: #F6E3A1; --glow-b: #D9B95A; }
+.nc[data-mode="tool"] { --glow-a: #F2A65A; --glow-b: #C9783A; }
+.nc[data-mode="ask"] { --glow-a: #F2A65A; --glow-b: #C9783A; }
+.nc[data-mode="error"] { --glow-a: #D98078; --glow-b: #B5534A; }
+@property --glow-a { syntax: '<color>'; inherits: true; initial-value: #F3EBDD; }
+@property --glow-b { syntax: '<color>'; inherits: true; initial-value: #C9BDAD; }
 .nc-mark { flex: none; color: #fff; font: 800 15px/1 "Doto", "Martian Mono", "Clanky Arabic", ui-monospace, monospace;
-  letter-spacing: .02em; text-shadow: 0 0 10px rgba(0, 30, 90, .55); white-space: nowrap; }
+  letter-spacing: .02em; white-space: nowrap; }
 .nc:not(.drop) .nc-globe { order: -1; }
 .nc:not(.drop) .nc-status { margin-left: auto; }
 .nc-row { position: absolute; left: 0; right: 0; top: 0; height: var(--row); display: flex; align-items: center; gap: 8px;
@@ -137,8 +135,8 @@
 .nc.closing .nc-row, .nc.closing .nc-body { opacity: 0; transition: opacity .1s ease; }
 /* desktop.html pins every canvas to the page's top-left (the sidekick's stage): not these. */
 .nc canvas { position: static; left: auto; top: auto; transform: none; will-change: auto; cursor: inherit; touch-action: auto; }
-.nc-globe { flex: none; width: 28px; height: 28px; image-rendering: pixelated; }
-.nc-status { flex: none; display: flex; align-items: center; gap: 8px; color: var(--ink); text-shadow: 0 0 10px rgba(0, 30, 90, .55); white-space: nowrap; max-width: 300px;
+.nc-globe { flex: none; width: 32px; height: 32px; image-rendering: pixelated; }
+.nc-status { flex: none; display: flex; align-items: center; gap: 8px; color: var(--ink); white-space: nowrap; max-width: 300px;
   overflow: hidden; text-overflow: ellipsis; }
 .nc.full .nc-status { max-width: none; }
 .nc-label { display: inline-block; overflow: hidden; text-overflow: ellipsis; will-change: transform, opacity;
@@ -163,7 +161,7 @@
 .nc-goo .g-notch { border-radius: 0 0 14px 14px; }
 .nc-goo .g-drop { border-radius: 50%; }
 .nc-goo .g-tongue { border-radius: 0 0 50% 50% / 0 0 16px 16px; }
-.nc[data-mode="error"] .nc-status { color: #ffcf8a; }
+.nc[data-mode="error"] .nc-status { color: #E08A80; }
 .nc-body { position: absolute; left: 0; right: 0; top: var(--row); padding: 2px 20px 16px; box-sizing: border-box; opacity: 0;
   transition: opacity .2s ease .18s; }
 /* Words show the frame they arrive: no fade on the way in. */
@@ -175,11 +173,11 @@
    system draws it over the content (macOS's default) or beside it; the words keep the same width either way. */
 .nc-text { --sb: 12px; margin: 0 calc(-1 * var(--sb)) 0 0; padding-right: var(--sb); box-sizing: border-box; scrollbar-gutter: stable;
   max-height: ${MAX_BODY}px; overflow: hidden auto; overscroll-behavior: contain; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink);
-  scrollbar-width: thin; scrollbar-color: rgba(120,255,226,.35) transparent;
+  scrollbar-width: thin; scrollbar-color: rgba(243,235,221,.35) transparent;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%); }
 /* Long replies scroll (wheel or trackpad); the edges fade only where there's more to see. */
 .nc-text::-webkit-scrollbar { width: 6px; }
-.nc-text::-webkit-scrollbar-thumb { background: rgba(120,255,226,.35); border-radius: 3px; }
+.nc-text::-webkit-scrollbar-thumb { background: rgba(243,235,221,.35); border-radius: 3px; }
 .nc-text::-webkit-scrollbar-track { background: transparent; }
 .nc-text.top { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent 100%); }
 .nc-text.end { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px); }
@@ -189,8 +187,8 @@
 .nc-line:dir(rtl) { font-family: "Clanky Arabic RTL", "Martian Mono", "Clanky Arabic", ui-monospace, Menlo, monospace; }
 .nc-choices { display: flex; gap: 8px; margin-top: 12px; }
 .nc-choices button { font: inherit; letter-spacing: inherit; border-radius: 999px; padding: 4px 14px; cursor: pointer;
-  border: 1px solid rgba(120,255,226,.45); background: transparent; color: var(--ink); }
-.nc-choices button:first-child { background: var(--accent); border-color: var(--accent); color: #000; }
+  border: 1px solid rgba(243,235,221,.45); background: transparent; color: var(--ink); }
+.nc-choices button:first-child { background: var(--accent); border-color: var(--accent); color: #2A2420; }
 .nc-choices button.sel { outline: 2px solid var(--ink); outline-offset: 2px; }
 .nc-choices button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .nc-keys { align-self: center; margin-left: auto; color: var(--ink-3); }
@@ -220,7 +218,7 @@
   sr.setAttribute('role', 'status');
   const announce = (t) => { sr.textContent = ''; setTimeout(() => { sr.textContent = String(t ?? '').replace(/\*\*|__|`|^#+\s*/gm, ''); }, 60); };
   el.innerHTML = '<div class="nc-skin" aria-hidden="true"><i class="nc-glow l"></i><i class="nc-glow r"></i></div>'
-    + '<div class="nc-row"><span class="nc-mark">JARVIS</span><canvas class="nc-globe" aria-hidden="true"></canvas>'
+    + '<div class="nc-row"><span class="nc-mark">Clanky</span><canvas class="nc-globe" aria-hidden="true"></canvas>'
     + '<div class="nc-status"><canvas class="nc-wave" aria-hidden="true"></canvas><span class="nc-label"></span></div></div>'
     + '<div class="nc-body"><p class="nc-text"></p><div class="nc-choices" hidden></div><div class="nc-rate" hidden></div></div>';
   // The goo: blurred, then its alpha thresholded, so shapes that touch melt into one (metaballs). The notch, a tongue,
@@ -481,54 +479,19 @@
   // It takes clicks only while it has buttons or something to read (hovering keeps it open).
   const hot = (on) => el.classList.toggle('hot', !!on);
 
-  // ---------- the globe ----------
-  const CELLS = 28;
+  // ---------- the lens: the ghost (ghost.js), on the capsule's black, so always its dark sheet ----------
+  const CELLS = 32;
   const gctx = globe.getContext('2d');
+  const LENS_STATE = { listen: 'listening', talk: 'talking', think: 'thinking', tool: 'working', done: 'done', error: 'error' };
   const drawGlobe = (dt) => {
-    const dpr = devicePixelRatio || 1, px = Math.max(1, Math.round(dpr));
-    if (globe.width !== CELLS * px) { globe.width = globe.height = CELLS * px; }
+    const dpr = devicePixelRatio || 1;
+    if (globe.width !== CELLS * dpr) { globe.width = globe.height = CELLS * dpr; }
+    gctx.setTransform(1, 0, 0, 1, 0, 0);
     gctx.clearRect(0, 0, globe.width, globe.height);
-    const buf = new Map();
-    const put = (x, y, l) => {
-      const gx = Math.round(x), gy = Math.round(y);
-      if (gx < 0 || gy < 0 || gx >= CELLS || gy >= CELLS) return;
-      const k = gy * CELLS + gx;
-      if ((buf.get(k) ?? 0) < l) buf.set(k, l);
-    };
-    const playing = R.voiceOut?.playing?.();
-    jst.dt = dt; jst.t += dt;
-    jst.mode = st.mode === 'error' ? null : playing ? 'talk' : st.mode === 'tool' ? 'think' : st.mode;
-    jst.voice = playing ? R.voiceOut.level() : null;
-    jst.heard = st.mic;
-    jst.happy = st.mode === 'done' ? 0.6 : 0;
-    jst.mouth = playing ? (jst.voice > 0.35 ? 'talk2' : jst.voice > 0.08 ? 'talk1' : null) : st.mode === 'error' ? 'frown' : null;
-    jst.brow = st.mode === 'think' || st.mode === 'tool' ? 'raised' : null;
-    const k = { put, L, th: () => 0 };
-    const person = R.people?.[st.look];
-    // The lens shows whoever was picked: JARVIS's globe, a person (head and shoulders), or the Clanky's blob.
-    if (person) person.body(k, CELLS / 2 - 0.5, CELLS / 2 + 3, 10, jst);
-    else if (st.look === 'jarvis' || !st.look || !R.jarvis) R.jarvis?.body(k, CELLS / 2 - 0.5, CELLS / 2 - 0.5, 10.5, jst);
-    else blob(put, jst);
-    for (const [k, l] of buf) {
-      gctx.fillStyle = PAL[clamp(l, 1, L)];
-      gctx.fillRect((k % CELLS) * px, Math.floor(k / CELLS) * px, px, px);
-    }
-  };
-
-  // The original Clanky in the lens: a glowing goo blob that breathes and talks, two dark eyes that blink and look.
-  const blob = (put, s) => {
-    const c = CELLS / 2 - 0.5, v = s.voice ?? (s.mode === 'listen' ? s.heard * 0.6 : 0);
-    const rx = 9 + v * 1.4, ry = 8.2 - v * 0.6 + 0.3 * Math.sin(s.t * 2.2), cy = c + 1.5;
-    const ex = Math.round(s.look[0] * 1.6), ey = Math.round(s.look[1] * 1.2), blink = (s.t % 4.2) < 0.12;
-    for (let y = -11; y <= 11; y++) for (let x = -11; x <= 11; x++) {
-      const d = (x * x) / (rx * rx) + (y * y) / (ry * ry);
-      if (d > 1) continue;
-      // Eyes: holes in the light (2 tall, 1 when blinking); the mouth opens with the voice.
-      const eye = (x === -3 + ex || x === 3 + ex) && (blink ? y === -1 + ey : y >= -2 + ey && y <= -1 + ey);
-      const mouth = v > 0.1 && x >= -1 && x <= 1 && y >= 2 && y <= 2 + Math.round(v * 2.5);
-      if (eye || mouth) continue;
-      put(c + x, cy + y, d < 0.35 ? 4 : d < 0.7 ? 3 : 2);
-    }
+    gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    jst.t += dt;
+    const state = R.voiceOut?.playing?.() ? 'talking' : LENS_STATE[st.mode] ?? 'idle';
+    R.ghost?.draw(gctx, CELLS / 2, CELLS / 2, { state, t: jst.t, scale: 1, dark: true, dpr, reduced: matchMedia('(prefers-reduced-motion: reduce)').matches });
   };
 
   // ---------- the waveform ----------
@@ -576,10 +539,10 @@
       wctx.lineTo(x0, y0);
     };
     wctx.lineCap = 'round'; wctx.lineJoin = 'round';
-    // An echo underneath, flipped and dim, then the glow, then a bright core.
-    path(-0.55); wctx.strokeStyle = 'rgba(70, 140, 255, .35)'; wctx.lineWidth = 1.2; wctx.shadowBlur = 0; wctx.stroke();
-    path(1); wctx.strokeStyle = 'rgba(80, 170, 255, .55)'; wctx.lineWidth = 3.2; wctx.shadowColor = '#3d8bff'; wctx.shadowBlur = 8; wctx.stroke();
-    path(1); wctx.strokeStyle = '#e9fbff'; wctx.lineWidth = 1.3; wctx.shadowBlur = 0; wctx.stroke();
+    // An echo underneath, flipped and dim, then the line: sky while listening, oat while speaking. No glow.
+    const col = st.mode === 'listen' && !smp ? '#A9CBE3' : '#F3EBDD';
+    path(-0.55); wctx.strokeStyle = col; wctx.globalAlpha = 0.35; wctx.lineWidth = 1.2; wctx.stroke();
+    path(1); wctx.globalAlpha = 1; wctx.lineWidth = 2; wctx.stroke();
   };
 
   const frame = (now) => {
@@ -802,10 +765,9 @@
   R.notch = {
     enabled: false,
     get style() { return drop() ? 'drop' : 'spread'; },
-    // The name on the capsule: the look's own (JARVIS, Clanky, …).
-    set name(v) { $('.nc-mark').textContent = String(v || 'JARVIS'); if (st.open) apply(shape); },
-    // The look in the lens: 'jarvis', a person ('anime', 'sarah', 'adrian', 'rita', 'ultren', 'glayos'), or 'classic' (the Clanky blob).
-    set look(v) { st.look = String(v || 'jarvis'); jst.swing = null; },
+    // The name on the capsule.
+    set name(v) { $('.nc-mark').textContent = String(v || 'Clanky'); if (st.open) apply(shape); },
+    set look(v) {}, // one look now: the ghost, coloured by the personality (ghost.js)
     set style(v) {
       const d = v === 'drop';
       if (d === drop()) return;

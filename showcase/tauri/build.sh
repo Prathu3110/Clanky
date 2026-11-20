@@ -37,6 +37,8 @@ cd src-tauri
 # the keychain, else ad-hoc. A stable identity keeps macOS permissions across rebuilds.
 if [ "$(uname)" = "Darwin" ] && [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
   APPLE_SIGNING_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)"
+  # Clanky: else the self-signed dev certificate from scripts/dev-cert.sh, so permissions survive rebuilds.
+  [ -z "$APPLE_SIGNING_IDENTITY" ] && security find-identity -v -p codesigning 2>/dev/null | grep '"Clanky Dev"' >/dev/null && APPLE_SIGNING_IDENTITY="Clanky Dev"
   export APPLE_SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:--}"
 fi
 # ./build.sh release --target <triple> builds for one target (used by the release workflow).

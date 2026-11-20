@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { GeminiVoice, geminiAccount, plain, speechRequest, GEMINI_API, GEMINI_DEFAULT_VOICE, GEMINI_LOOK_VOICES, GEMINI_MODEL, GEMINI_TAGS, GEMINI_VOICES } from '../gemini.mjs';
+import { GeminiVoice, geminiAccount, plain, speechRequest, GEMINI_API, GEMINI_DEFAULT_VOICE, GEMINI_MODEL, GEMINI_TAGS, GEMINI_VOICES } from '../gemini.mjs';
 import { VOICE_CUES } from '../speech.mjs';
 
 const tick = (ms = 5) => new Promise((r) => setTimeout(r, ms));
@@ -167,7 +167,4 @@ assert.deepEqual(await geminiAccount('k', { fetchImpl: fake(503) }), { ok: false
 assert.deepEqual(await geminiAccount('k', { fetchImpl: async () => { throw new Error('offline'); } }), { ok: false, reason: 'network' });
 
 // Each look has its own Gemini voice, one of Gemini's, and no two looks share one.
-assert.deepEqual(Object.keys(GEMINI_LOOK_VOICES), ['classic', 'jarvis', 'glayos', 'ultren', 'anime', 'sarah', 'adrian', 'rita'], 'the same looks as sidekick.mjs LOOKS');
-for (const v of Object.values(GEMINI_LOOK_VOICES)) assert.ok(GEMINI_VOICES.some((x) => x.id === v), `${v} is a Gemini voice`);
-assert.equal(new Set(Object.values(GEMINI_LOOK_VOICES)).size, 8);
 console.log('gemini tests passed');

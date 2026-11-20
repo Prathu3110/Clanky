@@ -9,10 +9,13 @@
 
   // ---------------------------------------------------------------- look
   const P = 4, MONO = '"Martian Mono", "Clanky Arabic", ui-monospace, monospace', DOTO = '"Doto", "Martian Mono", "Clanky Arabic", ui-monospace, monospace';
-  const ACC = '#78ffe2', HOT = '#e6fffa', MID = '#28c4b8', DEEP = '#0e5c60', EDGE = 'rgba(3,39,34,0.6)';
-  const GLASS = 'rgba(6,22,24,0.94)', TEXT = '#dcfff6', DIM = '#8ab8b0', INKDARK = '#032722';
-  const TONES = { accent: ACC, teal: '#78ffe2', amber: '#ffcf5c', coral: '#ff8a7a', lilac: '#b9a4ff', sky: '#7cc8ff', lime: '#b6f36b', red: '#ff6b6b', white: '#e8fffa' };
-  const LED = ['#051214', '#0e5c60', '#28c4b8', '#78ffe2', '#e6fffa'];
+  // Design tokens (design/tokens.json, glass.js): oat paper cards with an ink edge, tangerine for the one thing to look at.
+  const ACC = '#F2A65A', HOT = '#F2A65A', MID = '#5E5248', DEEP = '#E8DFCF', EDGE = '#F3EBDD';
+  const GLASS = '#F3EBDD', TEXT = '#2A2420', DIM = '#5E5248', INKDARK = '#2A2420', INK = '#2A2420';
+  // Mark colours the drawings can ask for by name: strong enough to read on white and on dark apps, each cased in oat.
+  const TONES = { accent: ACC, teal: '#30945F', amber: '#EDB53C', coral: '#B5534A', lilac: '#7A5CC4', sky: '#3468CE', lime: '#5E8A3A', red: '#B5534A', white: INK };
+  // The five shades 3D models, maps and pictures are dithered into: ink up to oat.
+  const LED = ['#2A2420', '#4A4038', '#5E5248', '#A89A88', '#E8DFCF'];
   const B4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
   const tone = (t) => TONES[t] || ACC;
   const now = () => performance.now() / 1000;
@@ -49,12 +52,8 @@
     r = clamp(r, 0, Math.min(w, h) / 2);
     return [...arc(x + w - r, y + r, r, r, -Math.PI / 2, 0, 10), ...arc(x + w - r, y + h - r, r, r, 0, Math.PI / 2, 10), ...arc(x + r, y + h - r, r, r, Math.PI / 2, Math.PI, 10), ...arc(x + r, y + r, r, r, Math.PI, Math.PI * 1.5, 10)];
   }
-  function stepped(x, y, w, h, c = 2 * P) {
-    const s = c / 2;
-    return [[x + c, y], [x + w - c, y], [x + w - c, y + s], [x + w - s, y + s], [x + w - s, y + c], [x + w, y + c], [x + w, y + h - c], [x + w - s, y + h - c], [x + w - s, y + h - s], [x + w - c, y + h - s], [x + w - c, y + h],
-      [x + c, y + h], [x + c, y + h - s], [x + s, y + h - s], [x + s, y + h - c], [x, y + h - c], [x, y + c], [x + s, y + c], [x + s, y + s], [x + c, y + s], [x + c, y]];
-  }
-  const steppedPath = (x, y, w, h, c) => { const p = new Path2D(); stepped(x, y, w, h, c).forEach((q, i) => (i ? p.lineTo(q[0], q[1]) : p.moveTo(q[0], q[1]))); return p; };
+  // Rounded to the design's radius, like every other surface (glass.js).
+  const steppedPath = (x, y, w, h, c) => R.glass.steppedPath(x, y, w, h, c);
   function catmull(pts, closed) {
     const Q = closed ? [pts[pts.length - 1], ...pts, pts[0], pts[1]] : [pts[0], ...pts, pts[pts.length - 1]], out = [];
     for (let i = 1; i < Q.length - 2; i++) for (let k = 0; k < 10; k++) {
@@ -123,7 +122,6 @@
   view.setAttribute('aria-hidden', 'true');
   Object.assign(view.style, { position: 'fixed', left: '0', top: '0', width: '100vw', height: '100vh', pointerEvents: 'none', visibility: 'hidden', cursor: 'default' });
   const V = view.getContext('2d'), Lc = litC.getContext('2d');
-  const hasFilter = 'filter' in V;
   let W = innerWidth, H = innerHeight, DPR = 1, alloc = false;
   const mount = () => { const st = document.getElementById('stage'); if (st?.parentNode) st.parentNode.insertBefore(view, st); else document.body.appendChild(view); };
   if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount);
@@ -175,8 +173,6 @@
       for (const c of [V, Lc]) c.restore();
       const sx = C[0] * DPR, sy = C[1] * DPR, sw = C[2] * DPR, sh = C[3] * DPR;
       V.save(); V.setTransform(1, 0, 0, 1, 0, 0);
-      if (hasFilter) { V.globalAlpha = 0.75; V.filter = `blur(${4 * DPR}px)`; V.drawImage(litC, sx, sy, sw, sh, sx, sy, sw, sh); V.filter = 'none'; V.globalAlpha = 1; }
-      else { V.shadowColor = rgba(ACC, 0.75); V.shadowBlur = 8 * DPR; }
       V.drawImage(litC, sx, sy, sw, sh, sx, sy, sw, sh);
       V.restore();
     });
@@ -235,16 +231,11 @@
     base.save(); base.lineJoin = 'round'; base.lineWidth = 2.5; base.strokeStyle = EDGE; base.stroke(body); base.beginPath(); base.arc(pts[k][0], pts[k][1], ol.hw[k] + 1.2, 0, Math.PI * 2); base.fillStyle = EDGE; base.fill(); base.restore();
     lit.save(); lit.fillStyle = c; lit.fill(body); lit.beginPath(); lit.arc(pts[k][0], pts[k][1], ol.hw[k], 0, Math.PI * 2); lit.arc(pts[0][0], pts[0][1], ol.hw[0], 0, Math.PI * 2); lit.fill(); lit.restore();
   }
-  // Our chrome for cards and chips: stepped corners, dark glass, an accent edge, a glint along the top.
+  // Our chrome for cards: the shared surface (glass.js): oat paper, a 1.5 px ink edge, radius 6, a short hard shadow.
   function chrome(c, x, y, w, h, o = {}) {
-    const path = steppedPath(x, y, w, h, o.corner ?? 2 * P), edge = o.edge || ACC;
-    c.save();
-    c.fillStyle = o.fill || GLASS; c.shadowColor = 'rgba(0,0,0,0.35)'; c.shadowBlur = 14; c.shadowOffsetY = 4; c.fill(path);
-    c.shadowColor = rgba(edge, 0.7); c.shadowBlur = 8; c.shadowOffsetY = 0; c.strokeStyle = edge; c.lineWidth = 1.5; c.globalAlpha *= 0.9; c.stroke(path);
-    c.globalAlpha *= 0.6; c.shadowBlur = 0; c.strokeStyle = '#ffffff'; c.lineWidth = 1; c.beginPath(); c.moveTo(x + 3 * P, y + 1.5); c.lineTo(x + Math.min(w * 0.45, 90), y + 1.5); c.stroke();
-    c.restore();
+    R.glass.chrome(c, x, y, w, h, { corner: o.corner ?? 2 * P, fill: o.fill, edge: o.edge && o.edge !== ACC ? o.edge : null });
   }
-  // Words typing themselves in; the last couple land white.
+  // Words typing themselves in; the last couple land in the secondary ink.
   function typed(c, str, x, y, font, color, u, o = {}) {
     str = String(str ?? '');
     c.save(); c.font = R.rtlFont(str, font); c.textBaseline = o.baseline || 'alphabetic'; c.textAlign = 'left';
@@ -255,7 +246,7 @@
     if (n < str.length) touch(0.1);
     if (o.rim) { c.lineWidth = o.rim; c.strokeStyle = EDGE; c.lineJoin = 'round'; c.strokeText(str.slice(0, n), x0, y); }
     if (n >= str.length || o.land === false) { c.fillStyle = color; c.fillText(str.slice(0, n), x0, y); }
-    else { const head = str.slice(0, Math.max(0, n - 2)); c.fillStyle = color; c.fillText(head, x0, y); c.fillStyle = '#ffffff'; c.fillText(str.slice(head.length, n), x0 + c.measureText(head).width, y); }
+    else { const head = str.slice(0, Math.max(0, n - 2)); c.fillStyle = color; c.fillText(head, x0, y); c.fillStyle = DIM; c.fillText(str.slice(head.length, n), x0 + c.measureText(head).width, y); }
     c.restore();
     return full;
   }
@@ -334,9 +325,10 @@
     const u = clamp(age / 0.2, 0, 1), drop = reduced() ? 0 : Math.round((1 - u) * 3) * 3;
     b.save(); b.translate(0, -drop);
     if (o.down) b.translate(0, 2);
-    b.fillStyle = mixHex(fill, '#000000', 0.62); b.fill(steppedPath(x, y + (o.down ? 1 : 3), w, h, P));
-    b.fillStyle = o.hover ? mixHex(fill, '#ffffff', 0.3) : fill; b.fill(steppedPath(x, y, w, h, P));
-    b.fillStyle = 'rgba(255,255,255,0.55)'; b.fillRect(x + P, y + 1, w - 2 * P, 1.5); b.fillStyle = 'rgba(3,39,34,0.25)'; b.fillRect(x + P, y + h - 2.5, w - 2 * P, 1.5);
+    b.fillStyle = 'rgba(42,36,32,0.22)'; b.fill(steppedPath(x, y + (o.down ? 1 : 2), w, h, P));
+    const face = steppedPath(x, y, w, h, P);
+    b.fillStyle = o.hover ? mixHex(fill, '#ffffff', 0.2) : fill; b.fill(face);
+    b.strokeStyle = INK; b.lineWidth = 1.5; b.stroke(face);
     typed(b, str, cx, cy, CHIP(k), INKDARK, type, { anchor: 'middle', baseline: 'middle', land: false });
     b.restore();
   }
@@ -467,7 +459,7 @@
       const [x, y, w, h] = rectOf(m), p = 8, g = (v) => Math.round(v / P) * P, hole = [g(x - p), g(y - p), g(w + 2 * p), g(h + 2 * p)];
       add({ z: 0, part: m.part, screen: true, p: 1, box: () => [0, 0, W, H], draw(b, l, t) {
         const u = clamp((t - this.born) / 0.5, 0, 1), BAND = 6, e = BAND * P;
-        b.fillStyle = `rgba(3,14,16,${0.62 * u})`;
+        b.fillStyle = `rgba(42,36,32,${0.28 * u})`; // the explain scrim (design: light-app value)
         const outer = new Path2D(); outer.rect(0, 0, W, H); outer.rect(hole[0] - e, hole[1] - e, hole[2] + 2 * e, hole[3] + 2 * e); b.fill(outer, 'evenodd');
         // a dithered falloff round the opening (our pixels) instead of a blur
         for (let gy = Math.floor((hole[1] - e) / P); gy < (hole[1] + hole[3] + e) / P; gy++) for (let gx = Math.floor((hole[0] - e) / P); gx < (hole[0] + hole[2] + e) / P; gx++) {
@@ -649,7 +641,7 @@
         chrome(b, x, y, this.cw, this.ch, { edge: o.edge ? colorOf(this, this.color) : ACC });
         if (this.p < 1) return;
         if (bar) {
-          b.fillStyle = 'rgba(120,255,226,0.06)'; b.fillRect(x + 2, y + 2, w - 4, bar - 2);
+          b.fillStyle = 'rgba(42,36,32,0.05)'; b.fillRect(x + 2, y + 2, w - 4, bar - 2);
           b.fillStyle = DEEP; b.fillRect(x + 2, y + bar, w - 4, 1);
           [0, 1].forEach((k) => { b.fillStyle = k ? DEEP : ACC; b.fillRect(x + 12 + k * 12, y + 11, 5, 5); });
           if (o.title) typed(b, ellipsize(String(o.title).toLowerCase(), w - 206, `500 10px ${MONO}`), x + w / 2, y + 17, `500 10px ${MONO}`, DIM, (t - this.done) / 0.4, { anchor: 'middle' });
@@ -977,7 +969,7 @@
       const c = await card(m, w, h, function (b, l, t, x, y, age) {
         const u = clamp(age / 1, 0, 1);
         if (ready) for (const [gx, gy, v] of cells) { if ((B4[(gy % 4) * 4 + (gx % 4)] + 0.5) / 16 > u * 1.05) continue; b.fillStyle = LED[v]; b.fillRect(x + ix + gx * 3, y + 12 + gy * 3, 3, 3); }
-        else { b.fillStyle = 'rgba(14,92,96,0.25)'; b.fillRect(x + ix, y + 12, pw, ph); typed(b, 'no picture found', x + w / 2, y + 12 + ph / 2, SMALL, DIM, 1, { anchor: 'middle' }); }
+        else { b.fillStyle = 'rgba(42,36,32,0.08)'; b.fillRect(x + ix, y + 12, pw, ph); typed(b, 'no picture found', x + w / 2, y + 12 + ph / 2, SMALL, DIM, 1, { anchor: 'middle' }); }
         capRows.forEach((r, i) => typed(b, r, x + w / 2, y + capY + i * capLh, CAPF, TEXT, (age - 0.6 - i * 0.15) / 0.5, { anchor: 'middle' }));
         credRows.forEach((r, i) => typed(b, r, x + w / 2, y + credY + i * 14, `400 10px ${MONO}`, DIM, (age - 0.8) / 0.4, { anchor: 'middle' }));
         named.forEach((q, i) => {
@@ -1307,7 +1299,7 @@
         const u = reduced() ? 1 : ease(clamp(a / 0.5, 0, 1)), full = Math.max(2, (q.value / top) * track), bw = Math.max(2, full * u), col = tone(q.tone);
         if (u < 1) touch(0.1);
         b.fillStyle = col; b.fillRect(x + x0, mid - BH / 2, bw, BH);
-        b.fillStyle = 'rgba(255,255,255,0.45)'; b.fillRect(x + x0, mid - BH / 2, bw, 1.5); b.fillStyle = 'rgba(3,39,34,0.3)'; b.fillRect(x + x0, mid + BH / 2 - 1.5, bw, 1.5);
+        
         if (u >= 1) typed(b, vals[i], x + x0 + full + 8, mid + 4, TD1, TEXT, (a - 0.5) / 0.25);
       });
     }, { title: m.title || 'bars' });
@@ -1853,7 +1845,7 @@
     let hover = false, down = 0, br = null;
     const c = await card(m, w, h, function (b, l, t, x, y, age) {
       // a ticket: notches on both sides, a dashed tear line, a big number
-      b.fillStyle = 'rgba(3,14,16,1)'; for (const sx of [x - 1, x + w - 9]) b.fillRect(sx, y + 36 + off, 10, 10);
+      b.fillStyle = INK; for (const sx of [x - 1, x + w - 9]) b.fillRect(sx, y + 36 + off, 10, 10);
       b.fillStyle = DEEP; for (let dx = x + 14; dx < x + w - 14; dx += 8) b.fillRect(dx, y + 41 + off, 4, 1);
       titles.forEach((r, i) => typed(b, r, x + 18, y + 26 + i * 22, TF, TEXT, (age - i * 0.2) / 0.4));
       if (m.n != null) typed(b, String(m.n).padStart(2, '0'), x + w - 18, y + 26, `800 18px ${DOTO}`, MID, 1, { anchor: 'end' });
@@ -1951,7 +1943,7 @@
   // ---------------------------------------------------------------- speech: the caption at the bottom
   const cap = document.createElement('div');
   cap.setAttribute('role', 'status'); cap.setAttribute('aria-live', 'polite');
-  Object.assign(cap.style, { position: 'fixed', left: '50%', bottom: '18px', transform: 'translateX(-50%)', maxWidth: 'min(720px, 80vw)', padding: '8px 16px', font: `500 13px ${MONO}`, color: TEXT, background: GLASS, border: `1.5px solid ${ACC}`, boxShadow: `0 0 12px ${rgba(ACC, 0.45)}`, borderRadius: '2px', opacity: '0', transition: 'opacity .2s', pointerEvents: 'none', textAlign: 'center', zIndex: '5' });
+  Object.assign(cap.style, { position: 'fixed', left: '50%', bottom: '18px', transform: 'translateX(-50%)', maxWidth: 'min(720px, 80vw)', padding: '8px 16px', font: `500 13px ${MONO}`, color: TEXT, background: GLASS, border: `1.5px solid ${INK}`, boxShadow: '0 2px 0 rgba(42,36,32,0.22)', borderRadius: '6px', opacity: '0', transition: 'opacity .2s', pointerEvents: 'none', textAlign: 'center', zIndex: '5' });
   const mountCap = () => document.body.appendChild(cap);
   if (document.body) mountCap(); else document.addEventListener('DOMContentLoaded', mountCap);
   const caption = { show(text) { cap.style.bottom = `${(R.safe?.bottom ?? 0) + 18}px`; cap.textContent = text; cap.style.opacity = text ? '1' : '0'; }, hide() { cap.style.opacity = '0'; } };
@@ -2135,7 +2127,7 @@
     if (cw < 4) return;
     chrome(b, x, y, cw, ch);
     if (!this.ready) return;
-    b.fillStyle = 'rgba(120,255,226,0.06)'; b.fillRect(x + 2, y + 2, w - 4, 24);
+    b.fillStyle = 'rgba(42,36,32,0.05)'; b.fillRect(x + 2, y + 2, w - 4, 24);
     b.fillStyle = DEEP; b.fillRect(x + 2, y + 26, w - 4, 1);
     [0, 1].forEach((k) => { b.fillStyle = k ? DEEP : ACC; b.fillRect(x + 12 + k * 12, y + 11, 5, 5); });
     typed(b, 'reminders', x + w / 2, y + 17, `500 10px ${MONO}`, DIM, (t - this.opened) / 0.4, { anchor: 'middle' });
@@ -2250,7 +2242,6 @@
     Object.assign(m, { alpha: 1, hover: false, hoverSave: false, hoverClose: false, hoverFull: false, hoverGrip: false, hoverPin: false });
     try { m.draw(B, L, now()); } finally { Object.assign(m, keep); }
     B.setTransform(1, 0, 0, 1, 0, 0);
-    if (hasFilter) { B.globalAlpha = 0.75; B.filter = `blur(${4 * scale}px)`; B.drawImage(lit, 0, 0); B.filter = 'none'; B.globalAlpha = 1; }
     B.drawImage(lit, 0, 0);
     return base;
   }
