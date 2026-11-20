@@ -13,8 +13,8 @@
 // Screens without a notch get the same capsule hanging from the top edge, with nothing to hide in at rest.
 // The overlay is click-through, so the host asks Clanky.notchHit(x, y) whether the cursor is over it.
 // API: Clanky.notch.enabled (set by the host from the setting) .active .listen() .level(v) .heard(text) .think(text)
-//      .tool(label) .text(chunk) .done({ speech }) .fail(message) .say(text) .prompt(question, choices, onChoose)
-//      .close() .rect()
+//      .tool(label) .text(chunk) .done({ speech, rate }) .fail(message) .say(text) .prompt(question, choices, onChoose)
+//      .hello(words) .close() .rect()
 (() => {
   const R = window.Clanky;
   if (typeof document === 'undefined' || !R) return;
@@ -194,6 +194,12 @@
 .nc-choices button.sel { outline: 2px solid var(--ink); outline-offset: 2px; }
 .nc-choices button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .nc-keys { align-self: center; margin-left: auto; color: var(--ink-3); }
+/* Good / Wrong under a reply that did something: quiet text, not Allow's accent. */
+.nc-rate { display: flex; gap: 16px; margin-top: 10px; line-height: 1.3; color: var(--ink-2); }
+.nc-rate button { font: inherit; letter-spacing: inherit; line-height: 1.3; padding: 2px 0; border: 0; background: none; color: var(--ink-2); cursor: pointer;
+  text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: color .15s ease, text-decoration-color .15s ease; }
+.nc-rate button:hover { color: var(--ink); text-decoration-color: currentColor; }
+.nc-rate button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
   .nc, .nc.closing { transition: opacity .18s ease; }
   .nc-goo { display: none !important; }
@@ -216,7 +222,7 @@
   el.innerHTML = '<div class="nc-skin" aria-hidden="true"><i class="nc-glow l"></i><i class="nc-glow r"></i></div>'
     + '<div class="nc-row"><span class="nc-mark">JARVIS</span><canvas class="nc-globe" aria-hidden="true"></canvas>'
     + '<div class="nc-status"><canvas class="nc-wave" aria-hidden="true"></canvas><span class="nc-label"></span></div></div>'
-    + '<div class="nc-body"><p class="nc-text"></p><div class="nc-choices" hidden></div></div>';
+    + '<div class="nc-body"><p class="nc-text"></p><div class="nc-choices" hidden></div><div class="nc-rate" hidden></div></div>';
   // The goo: blurred, then its alpha thresholded, so shapes that touch melt into one (metaballs). The notch, a tongue,
   // the pill and two droplets live in it while it pours out or melts back. It's drawn twice from the same shapes:
   // - fill: the capsule's black, faded by a vertical mask so the bridge is black where it leaves the notch, clear in
@@ -258,7 +264,7 @@
   document.fonts?.ready?.then(() => refit?.());
   document.fonts?.addEventListener?.('loadingdone', () => refit?.());
   const $ = (s) => el.querySelector(s);
-  const globe = $('.nc-globe'), label = $('.nc-label'), textEl = $('.nc-text'), choicesEl = $('.nc-choices'), wave = $('.nc-wave');
+  const globe = $('.nc-globe'), label = $('.nc-label'), textEl = $('.nc-text'), choicesEl = $('.nc-choices'), rateEl = $('.nc-rate'), wave = $('.nc-wave');
 
   // ---------- geometry ----------
   // The notch as the shell reported it (main.rs safe_js): left edge, width and height in this screen's CSS px.
@@ -431,7 +437,7 @@
       if (st.open) return;
       el.classList.remove('on', 'closing');
       st.liq = null; goo.style.display = 'none'; el.classList.remove('liquid'); st.folded = false; st.minW = 0; st.statusW = null;
-      st.text = ''; st.heard = ''; st.follow = true; textEl.textContent = ''; choicesEl.hidden = true; choicesEl.textContent = ''; setMode(null, '');
+      st.text = ''; st.heard = ''; st.follow = true; textEl.textContent = ''; choicesEl.hidden = true; choicesEl.textContent = ''; unrate(); setMode(null, '');
     }, reduced() ? 200 : 760);
   };
   // Which ends of the text have more past them (they fade), and whether the newest line is in view.
@@ -459,7 +465,7 @@
     if (st.follow) textEl.scrollTop = textEl.scrollHeight;
     edges();
     // The card eases to its new height as lines arrive, instead of jumping a line at a time.
-    const body = $('.nc-body'); body.style.setProperty('--bh', `${Math.ceil(textEl.offsetHeight + (choicesEl.hidden ? 0 : choicesEl.offsetHeight + 12) + 30)}px`);
+    const body = $('.nc-body'); body.style.setProperty('--bh', `${Math.ceil(textEl.offsetHeight + (choicesEl.hidden ? 0 : choicesEl.offsetHeight + 12) + (rateEl.hidden ? 0 : rateEl.offsetHeight + 10) + 30)}px`);
     apply(want()); } }); };
   const render = () => {
     const words = st.text || st.heard;
@@ -761,10 +767,32 @@
   // A new turn starts clean: anything left from the last one (a reply still lingering, or one folding away) goes.
   const fresh = () => {
     st.text = ''; st.heard = ''; st.prompt = null; st.folded = false; st.lingerAt = 0; st.speech = null; st.minW = 0; st.statusW = null; st.follow = true;
-    textEl.textContent = ''; choicesEl.hidden = true; choicesEl.textContent = '';
+    textEl.textContent = ''; choicesEl.hidden = true; choicesEl.textContent = ''; unrate();
     if (st.open) refit();
   };
   const closing = () => !st.open || el.classList.contains('closing') || !!st.retractT;
+  // Rating the reply: onRate(good) once, from Good or Wrong. Gone with the reply, a new turn, or an Allow question.
+  function unrate() { st.rate = null; rateEl.hidden = true; rateEl.textContent = ''; }
+  const rate = (onRate) => {
+    st.rate = onRate;
+    rateEl.textContent = '';
+    for (const [word, good] of [['Good', true], ['Wrong', false]]) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = word;
+      b.setAttribute('aria-label', good ? 'That was good' : 'That was wrong');
+      b.addEventListener('click', (e) => {
+        e.stopPropagation?.();
+        const f = st.rate; unrate();
+        if (good) { const t = document.createElement('span'); t.textContent = 'Thanks!'; rateEl.appendChild(t); rateEl.hidden = false; announce(t.textContent); }
+        st.lingerAt &&= performance.now();
+        refit();
+        f?.(good);
+      });
+      rateEl.appendChild(b);
+    }
+    rateEl.hidden = false;
+    refit();
+  };
   const linger = () => {
     // Long enough to read it: about a third of a second a word, between 3 and 14 seconds.
     const words = (st.text.match(/\S+/g) ?? []).length;
@@ -783,9 +811,11 @@
       if (d === drop()) return;
       // Open: fold away in the old style, come back out in the new one with the same contents.
       if (st.open) {
-        const keep = { mode: st.mode, words: label.textContent };
+        const keep = { mode: st.mode, words: label.textContent, linger: st.lingerAt ? st.linger : 0 };
         close();
-        setTimeout(() => { el.classList.toggle('drop', d); if (!st.open && keep.mode) { setMode(keep.mode, keep.words); show(); } }, 800);
+        // Regression: a hello at launch came back without its timer (the notch style arrives a moment after it) and
+        // stayed up for good. What was folding away still does.
+        setTimeout(() => { el.classList.toggle('drop', d); if (!st.open && keep.mode) { setMode(keep.mode, keep.words); show(); if (keep.linger) { st.linger = keep.linger; st.lingerAt = performance.now(); } } }, 800);
       } else el.classList.toggle('drop', d);
     },
     get active() { return st.open; },
@@ -797,20 +827,23 @@
     // Where replies show: 'capsule' (default) or 'cursor' (the sidekick's bubble; the capsule shows the state only).
     replies: 'capsule',
     // Replies at the cursor: the capsule shows it's answering, the words are elsewhere.
-    replying() { st.tokAt = performance.now(); st.lingerAt = 0; if (st.mode !== 'talk') setMode('reply', 'Answering'); show(); },
+    // While an Allow question waits, nothing else takes the card: what comes meanwhile shows once it's answered.
+    replying() { if (st.prompt) return; st.tokAt = performance.now(); st.lingerAt = 0; if (st.mode !== 'talk') setMode('reply', 'Answering'); show(); },
     // The answer is being drawn on screen: the capsule folds its text away (one place for the answer) and says so.
     // A click on the pill still opens the text.
-    yieldTo(words) { st.folded = true; st.lingerAt = 0; setMode('tool', words || 'Showing you'); show(); refit(); },
+    yieldTo(words) { if (st.prompt) return; st.folded = true; st.lingerAt = 0; setMode('tool', words || 'Showing you'); show(); refit(); },
     // A new request: clears the last reply, then thinks.
     begin() { fresh(); this.think(); },
     think(text) {
+      if (st.prompt) return;
       if (closing() || st.lingerAt) fresh();
       st.lingerAt = 0;
       if (st.mode !== 'tool' || text == null) setMode('think', 'Thinking');
       show();
     },
-    tool(words) { if (closing() || st.lingerAt) fresh(); st.lingerAt = 0; setMode('tool', words || 'Working'); show(); },
+    tool(words) { if (st.prompt) return; if (closing() || st.lingerAt) fresh(); st.lingerAt = 0; setMode('tool', words || 'Working'); show(); },
     text(chunk) {
+      if (st.prompt) { st.reply = (st.reply ?? '') + chunk; return; }
       if (closing()) fresh();
       st.lingerAt = 0;
       if (!st.text) chunk = String(chunk).replace(/^\s+/, '');
@@ -818,30 +851,43 @@
       if (!st.folded && st.mode !== 'talk') setMode('reply', '');
       render(); show();
     },
-    done({ speech } = {}) {
+    done({ speech, rate: onRate } = {}) {
       // A turn cut short by talking again ends while the mic is already on: the capsule stays listening.
       if (st.mode === 'listen' && st.open) return;
       st.speech = speech ?? null;
+      // Regression: lingering under a prompt let the next status wipe the Allow buttons. Answering it lingers instead.
+      if (st.prompt) return;
       if (!st.text && !st.prompt) { close(); return; }
       if (!st.prompt && !st.folded && st.mode !== 'talk' && st.mode !== 'error') setMode('done', '');
       if (st.text && !st.prompt && st.mode !== 'error') announce(st.text);
       linger();
+      if (typeof onRate === 'function' && st.mode !== 'error') rate(onRate);
     },
     fail(message) {
       if (st.mode === 'listen' && st.open) return;
       if (closing()) fresh();
+      unrate();
       st.text = String(message ?? 'Something went wrong.'); st.speech = null;
       setMode('error', 'Couldn’t finish'); render(); show(); linger(); announce(st.text);
     },
+    // At launch or when summoned, in place of the Clanky waving by the cursor: the compact capsule says hi and folds
+    // back in by itself. Never over a turn, a reply or a question already in it.
+    hello(words = 'Hi there') {
+      if (st.prompt || R.notch._busy?.() || (st.open && !closing() && (st.text || st.mode !== 'done'))) return false;
+      fresh(); setMode('done', String(words)); show();
+      st.linger = 2600; st.lingerAt = performance.now();
+      return true;
+    },
     // A line on its own (a reminder, a greeting): out, said, back in.
-    say(text) { if (R.notch._busy?.() && st.text) return; st.text = ''; this.text(text); this.done(); },
+    say(text) { if (st.prompt || (R.notch._busy?.() && st.text)) return; st.text = ''; unrate(); this.text(text); this.done(); },
     // The reply moved to the research card: the capsule stops showing it.
-    reset() { st.text = ''; st.heard = ''; render(); },
+    reset() { if (st.prompt) { st.reply = ''; return; } st.text = ''; st.heard = ''; render(); },
     // Allow / Don't allow. onChoose(i): the first answers yes. The host's hidden field still takes Y, N, Tab, Enter.
     prompt(question, choices, onChoose) {
       if (closing()) fresh();
       const me = { onChoose };
       st.prompt = me; st.lingerAt = 0; st.folded = false;
+      unrate();
       st.reply = st.text; // the reply so far comes back once it's answered
       st.text = String(question ?? '');
       setMode('ask', 'Needs your OK');

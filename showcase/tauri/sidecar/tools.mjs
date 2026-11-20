@@ -232,6 +232,23 @@ export function sideSearchFor(route) {
 // Every request and redirect hop of web_fetch goes through safety.mjs, by name and by the addresses it resolves to.
 export const guardFetch = async (url) => { const v = await checkFetch(url); return v.level === BLOCK ? `Blocked for safety: ${v.reason}` : null; };
 
+// Tools run in parallel, but the overlay shows one yes/no at a time: a second one replaced the first and answered it
+// no, so the model retried and asked again. Yes/no questions wait their turn; one cancelled while waiting never shows.
+export function oneYesNoAtATime(ask) {
+  let last = Promise.resolve();
+  return (opts, signal) => {
+    if (!opts?.choices) return ask(opts, signal);
+    const prev = last;
+    const mine = new Promise((resolve) => {
+      const gone = () => resolve(null);
+      signal?.addEventListener('abort', gone, { once: true });
+      prev.then(() => { signal?.removeEventListener('abort', gone); if (!signal?.aborted) resolve(ask(opts, signal)); });
+    });
+    last = prev.then(() => mine).then(() => {}, () => {});
+    return mine;
+  };
+}
+
 export function createTools({ allowActions, ui, ask, openUrl, onCommitments, focus = null, firedReminders = () => [], showList, fmtWhen, commitmentsText, userName, onPlan = () => {}, speak = () => false, onHandoff = () => {}, watchClicks = () => {}, onInkGone = () => {}, askShell = async () => ({ ok: false, error: 'Clanky isn\'t running.' }), workdir = HOME, own = null, sideSearch = async () => null, pointScale = () => 'pixels', skipAllow = () => false, jobs = null, skills = null }) {
   // Relative paths (and run_command) start in workdir: ~/Clanky for the chat, its own folder for an agent.
   const at = (p) => { const s = String(p ?? ''); return /^~(?=$|\/|\\)/.test(s) || path.isAbsolute(s) || /^[a-z]:[\\/]/i.test(s) ? s : path.join(workdir, s); };
@@ -276,7 +293,7 @@ export function createTools({ allowActions, ui, ask, openUrl, onCommitments, foc
       let ev;
       try { ev = JSON.parse(line.slice(1)); } catch { return; }
       if (ev.ev === 'borrow') ui({ kind: 'hands', borrow: true });
-      else if (ev.ev === 'step' && Array.isArray(ev.bounds) && ev.bounds.length === 4 && ev.bounds.every(Number.isFinite)) ui({ kind: 'hands', step: { bounds: ev.bounds } });
+      else if (ev.ev === 'step' && Array.isArray(ev.bounds) && ev.bounds.length === 4 && ev.bounds.every(Number.isFinite)) ui({ kind: 'hands', step: { bounds: ev.bounds, ...(ev.do === 'hover' ? { hover: true } : {}) } });
     } : undefined;
     let r;
     try { r = await runHands(args, { timeout: 120_000, onLine }); } finally { if (acting) ui({ kind: 'hands', on: false }); }
@@ -472,7 +489,7 @@ export function createTools({ allowActions, ui, ask, openUrl, onCommitments, foc
     ink.watch.unref?.();
   }
   // Steps that change what a window shows: the agent doing one is the screen changing under a drawing.
-  const CHANGING = new Set(['click', 'click_text', 'press_button', 'key', 'click_at', 'choose']);
+  const CHANGING = new Set(['click', 'click_text', 'press_button', 'key', 'click_at', 'choose', 'hover']);
   const agentChangesScreen = () => { if (windowBound() && !ink.active) screenChanged('agent'); };
   const toClipboard = (text) => copyText(text, askShell);
   // How each kind of place is found. retry: just after a click, when a menu or dialog may still be opening.
@@ -770,13 +787,13 @@ export function createTools({ allowActions, ui, ask, openUrl, onCommitments, foc
       },
       {
         name: 'act_in_app',
-        description: "Do things in another app for the user: click, fill in forms, pick from dropdowns and date pickers, scroll, press keys. Steps run in order; put a whole task in one call. {do:'click_text', text} clicks a link, button or tab by its visible words (no read_window needed). {do:'fill', field, text} fills one text field: field is its label or placeholder as shown (or id), it replaces the text and checks it took; use one fill per field, never click a label and type. {do:'choose', field, option} picks an option in a dropdown, select menu, type-to-search box or picker: it opens it, types or scrolls through the list (hundreds of options, even lists that only load rows as they scroll) and picks; field is its label or id. Never scroll a dropdown list yourself. To go to a web address, use the open tool (instant), not the address bar. To search a site that has a search page (YouTube, Google, Amazon, Wikipedia…), open its search URL (e.g. https://www.youtube.com/results?search_query=…) instead of typing into its search box, unless the user asks you to use the box: then fill it (fill replaces any old search) and press return. Many identical buttons or fields (a Reply under every post): add near, words from that item (author or first words of the post), to click_text or fill and it uses the one belonging to that item, scrolling to it. {do:'scroll', direction:'down'|'up'|'left'|'right', amount, text or id} scrolls the page, or the list or panel under that text or control; needed only for content that loads as you scroll: {do:'scroll', direction:'down', to_end:true} keeps going until the feed stops loading more, in one step; then read_window lists everything that loaded. Things already on the page don't need scrolling: click_text, fill and draw find them anywhere on it and scroll there themselves. {do:'click', id}; {do:'key', key} e.g. 'return', 'tab', 'escape'; {do:'type', text} only when the cursor is already in a text field; {do:'click_at', x, y} pixels in your latest screenshot, last resort; {do:'wait', seconds}. Dates: fill the date field with the date as the page shows dates (e.g. 10/30/2026); if a calendar opens instead, choose the month and year, then click_text the day (its label often reads like 'Choose Friday, October 30th, 2026'). After the steps the result lists the window's controls and text as they are now (after scrolls too), with fresh ids and field values, so check them there instead of calling read_window again. Every item on a long page ('reply to each post'): scroll with to_end if it loads more, one read_window, then one act_in_app call doing every item with near. Never survey a page by scrolling and screenshotting, and never stop at the first screenful. Never submit payments, send messages or delete things unless the user clearly asked for exactly that; showing or pointing at a button is not a request to click it. Clicks on delete, pay, send or sign-out buttons always ask the user first, so when they asked you to click one, call act_in_app right away instead of asking in your reply; the app asks them.",
+        description: "Do things in another app for the user: click, fill in forms, pick from dropdowns and date pickers, scroll, press keys. Steps run in order; put a whole task in one call. {do:'click_text', text} clicks a link, button or tab by its visible words (no read_window needed). {do:'fill', field, text} fills one text field: field is its label or placeholder as shown (or id), it replaces the text and checks it took; use one fill per field, never click a label and type. {do:'choose', field, option} picks an option in a dropdown, select menu, type-to-search box or picker: it opens it, types or scrolls through the list (hundreds of options, even lists that only load rows as they scroll) and picks; field is its label or id. Never scroll a dropdown list yourself. To go to a web address, use the open tool (instant), not the address bar. To search a site that has a search page (YouTube, Google, Amazon, Wikipedia…), open its search URL (e.g. https://www.youtube.com/results?search_query=…) instead of typing into its search box, unless the user asks you to use the box: then fill it (fill replaces any old search) and press return. Many identical buttons or fields (a Reply under every post): add near, words from that item (author or first words of the post), to click_text or fill and it uses the one belonging to that item, scrolling to it. {do:'scroll', direction:'down'|'up'|'left'|'right', amount, text or id} scrolls the page, or the list or panel under that text or control; needed only for content that loads as you scroll: {do:'scroll', direction:'down', to_end:true} keeps going until the feed stops loading more, in one step; then read_window lists everything that loaded. Things already on the page don't need scrolling: click_text, fill and draw find them anywhere on it and scroll there themselves. {do:'click', id}; {do:'key', key} e.g. 'return', 'tab', 'escape'; {do:'type', text} only when the cursor is already in a text field; {do:'click_at', x, y} pixels in your latest screenshot, last resort; {do:'wait', seconds}. Controls that only show when the pointer is over something (a card's ⋯ menu or Delete): {do:'hover', text, near} (or id, or x, y) rests the pointer there without clicking, then click_text the button it shows in the same call; the result names what appeared. Dates: fill the date field with the date as the page shows dates (e.g. 10/30/2026); if a calendar opens instead, choose the month and year, then click_text the day (its label often reads like 'Choose Friday, October 30th, 2026'). After the steps the result lists the window's controls and text as they are now (after scrolls too), with fresh ids and field values, so check them there instead of calling read_window again. Every item on a long page ('reply to each post'): scroll with to_end if it loads more, one read_window, then one act_in_app call doing every item with near. Never survey a page by scrolling and screenshotting, and never stop at the first screenful. Never submit payments, send messages or delete things unless the user clearly asked for exactly that; showing or pointing at a button is not a request to click it. Clicks on delete, pay, send or sign-out buttons always ask the user first, so when they asked you to click one, call act_in_app right away instead of asking in your reply; the app asks them.",
         parameters: z.object({
           target: z.string().optional(),
           steps: z.array(z.object({
             // read_window and take_screenshot aren't steps (the result already shows the window), but models put them
             // in anyway; they're dropped instead of failing the whole call.
-            do: z.enum(['click_text', 'fill', 'choose', 'scroll', 'set', 'focus', 'click', 'type', 'key', 'click_at', 'wait', 'read_window', 'take_screenshot', 'screenshot']),
+            do: z.enum(['click_text', 'fill', 'choose', 'scroll', 'set', 'focus', 'click', 'type', 'key', 'click_at', 'hover', 'wait', 'read_window', 'take_screenshot', 'screenshot']),
             id: z.number().int().optional(), field: z.string().optional(), text: z.string().optional(), option: z.string().optional(), near: z.string().optional(),
             key: z.string().optional(), direction: z.enum(['down', 'up', 'left', 'right']).optional(), amount: z.number().int().optional(), to_end: z.boolean().optional(),
             x: z.number().optional(), y: z.number().optional(), seconds: z.number().optional(),
@@ -800,14 +817,14 @@ export function createTools({ allowActions, ui, ask, openUrl, onCommitments, foc
           // Stay on the exact window read for this request: an app can have several, and keystrokes must land in this one.
           const sameApp = lastRead?.turn === turn && (asked === 'front' || (lastRead.app ?? '').toLowerCase().includes(asked.toLowerCase()) || (asked.toLowerCase() === 'browser'));
           const t = sameApp ? `window:${lastRead.win}` : asked;
-          // Ids up to the first click come from read_window; after a click the helper re-reads the page itself.
-          const firstClick = steps.findIndex((s) => s.do === 'click' || s.do === 'click_text');
+          // Ids up to the first click (or hover) come from read_window; after one the helper re-reads the page itself.
+          const firstClick = steps.findIndex((s) => ['click', 'click_text', 'hover'].includes(s.do));
           const upTo = firstClick < 0 ? steps.length : firstClick + 1;
           const spec = t === 'front' || t.startsWith('window:') ? t : `app:${t}`;
           const live = steps.slice(0, upTo).some((s) => s.id != null) ? await liveControls(spec) : null;
           const mapped = [];
           for (const [i, s] of steps.entries()) {
-            if (s.do === 'click_at' && s.x != null && s.y != null) { const [x, y] = await shotPoint(s.x, s.y); mapped.push({ ...s, x, y, global: true }); }
+            if ((s.do === 'click_at' || s.do === 'hover') && s.x != null && s.y != null) { const [x, y] = await shotPoint(s.x, s.y); mapped.push({ ...s, x, y, global: true }); }
             else if (live && i < upTo && s.id != null) { const c = live(s.id); mapped.push({ ...s, id: c.id, label: c.label }); }
             else mapped.push(s);
           }

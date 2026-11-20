@@ -79,6 +79,7 @@ jobs:
           src-tauri/binaries/clanky-voice-"$(rustc -vV | sed -n 's/^host: //p')" --test-snap
           src-tauri/binaries/clanky-voice-"$(rustc -vV | sed -n 's/^host: //p')" --test-clicks
           src-tauri/binaries/clanky-voice-"$(rustc -vV | sed -n 's/^host: //p')" --test-chord
+          src-tauri/binaries/clanky-voice-"$(rustc -vV | sed -n 's/^host: //p')" --test-mics
 
       - name: Test the macOS hands helper
         if: runner.os == 'macOS'

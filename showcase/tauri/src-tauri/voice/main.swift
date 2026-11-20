@@ -423,6 +423,18 @@ enum InputDevice {
         guard let dev = defaultInput(), let t = transport(dev), t == kAudioDeviceTransportTypeBluetooth || t == kAudioDeviceTransportTypeBluetoothLE else { return nil }
         return all().first { transport($0) == kAudioDeviceTransportTypeBuiltIn && hasInput($0) }
     }
+    /// The default input as this process sees it now, if it's a live mic.
+    static func current() -> AudioDeviceID? { defaultInput().flatMap { hasInput($0) ? $0 : nil } }
+    static func builtIn() -> AudioDeviceID? { all().first { transport($0) == kAudioDeviceTransportTypeBuiltIn && hasInput($0) } }
+    /// The mics a take tries, in order. AVAudioEngine's input unit is shared by the whole process, and once it's stuck
+    /// on a mic that went away (an iPhone's Continuity mic dropping out) every new engine fails on it until a restart;
+    /// naming a live mic unsticks it. Automatic tries the system's choice, then the default by name, then the built-in.
+    static func tries(picked: AudioDeviceID?, current: AudioDeviceID?, builtIn: AudioDeviceID?) -> [AudioDeviceID?] {
+        if picked != nil { return [picked] }
+        var out: [AudioDeviceID?] = [nil]
+        for d in [current, builtIn] { if let d, !out.contains(d) { out.append(d) } }
+        return out
+    }
     static func use(_ dev: AudioDeviceID, on input: AVAudioInputNode) -> Bool {
         guard let unit = input.audioUnit else { return false }
         var id = dev
@@ -1095,10 +1107,10 @@ final class Voice {
         }
         if engine != nil { stopAudio(close: true) }
         // Wake listening fails quietly and tries again later; a take tells the user.
-        let fail = { (code: String) in
-            if self.phase == .wake { self.phase = .idle; self.wakeRetryAt = uptime() + 30; wakeLog("couldn't start (\(code))") } else { emit(["type": "error", "code": code]); self.cancel() }
+        let fail = { (code: String, extra: [String: Any]) in
+            if self.phase == .wake { self.phase = .idle; self.wakeRetryAt = uptime() + 30; wakeLog("couldn't start (\(code))") } else { emit(["type": "error", "code": code].merging(extra) { a, _ in a }); self.cancel() }
         }
-        guard let r = makeRecognizer() else { return fail("unavailable") }
+        guard let r = makeRecognizer() else { return fail("unavailable", [:]) }
         let gain = autoGain, feed = feed
         let ingest = { [weak self] (buffer: AVAudioPCMBuffer) in
             guard let samples = buffer.floatChannelData?[0] else { feed.append(buffer); return }
@@ -1114,24 +1126,32 @@ final class Voice {
         }
         if LiveTest.url != nil { feed.set(r); rec = r; LiveTest.sink = ingest; return }
 
-        let eng = AVAudioEngine()
-        let input = eng.inputNode
-        if let device, !InputDevice.use(device, on: input) { log("couldn't switch to mic \(device)") }
-        let format = input.outputFormat(forBus: 0)
-        guard format.sampleRate > 0, format.channelCount > 0 else {
-            r.cancel()
-            return fail("no_input")
-        }
         feed.set(r)
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in ingest(buffer) }
-        do {
-            eng.prepare()
-            try eng.start()
-        } catch {
-            log("engine start failed: \(error)")
+        var started: AVAudioEngine?, problem: String?
+        for dev in InputDevice.tries(picked: device, current: InputDevice.current(), builtIn: InputDevice.builtIn()) {
+            let eng = AVAudioEngine()
+            let input = eng.inputNode
+            if let dev, !InputDevice.use(dev, on: input) { log("couldn't switch to mic \(dev)"); continue }
+            let format = input.outputFormat(forBus: 0)
+            guard format.sampleRate > 0, format.channelCount > 0 else { continue }
+            input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in ingest(buffer) }
+            do {
+                eng.prepare()
+                try eng.start()
+                if dev != device { log("mic opened on device \(dev ?? 0) after the default one failed") }
+                started = eng
+                break
+            } catch {
+                log("engine start failed\(dev.map { " on device \($0)" } ?? ""): \(error)")
+                input.removeTap(onBus: 0)
+                problem = "\(error)"
+            }
+        }
+        guard let eng = started else {
             feed.set(nil)
             r.cancel()
-            return fail("no_input")
+            // A mic that's there but won't open isn't a missing mic.
+            return fail("no_input", problem.map { ["reason": "failed", "message": $0] } ?? [:])
         }
         engine = eng
         engineDevice = device
@@ -1370,6 +1390,17 @@ if args.contains("--test-chord") {
     check("a key pressed after it still does", Voice.isShortcut(extra: false, heldAtArm: [0x00], now: [0x00, 0x01]))
     check("a held key let go isn't a key pressed", !Voice.isShortcut(extra: false, heldAtArm: [0x00], now: []))
     check("an extra ⇧ or ⌘ still counts with a key held", Voice.isShortcut(extra: true, heldAtArm: [0x00], now: [0x00]))
+    exit(bad == 0 ? 0 : 1)
+}
+// --test-mics: which mics a take tries when the first won't open; exits 1 on a failure.
+if args.contains("--test-mics") {
+    var bad = 0
+    func check(_ name: String, _ ok: Bool) { print("\(ok ? "ok" : "FAIL") \(name)"); if !ok { bad += 1 } }
+    check("a picked mic is the only one tried", InputDevice.tries(picked: 7, current: 3, builtIn: 4) == [7])
+    check("automatic: the system's choice, then the default by name, then the built-in", InputDevice.tries(picked: nil, current: 3, builtIn: 4) == [nil, 3, 4])
+    check("the default is the built-in: tried once by name", InputDevice.tries(picked: nil, current: 4, builtIn: 4) == [nil, 4])
+    check("no live default: straight to the built-in", InputDevice.tries(picked: nil, current: nil, builtIn: 4) == [nil, 4])
+    check("nothing else to try", InputDevice.tries(picked: nil, current: nil, builtIn: nil) == [nil])
     exit(bad == 0 ? 0 : 1)
 }
 // --test-clicks: which clicks count as changing the screen, with made-up element roles; exits 1 on a failure.

@@ -88,7 +88,7 @@ export const canSnap = (platform, hands) => platform === 'darwin' || (platform =
 export const canCircle = (platform) => platform === 'darwin' || platform === 'win32';
 
 /** What to say when the voice helper can't use the microphone, from its no_input reason (the Mac helper sends
- *  none: it only reports a missing mic). */
+ *  failed when a mic is there but won't open, and none for a missing mic). */
 export function micTrouble(platform, reason, detail = '') {
   const win = platform === 'win32';
   const sound = win ? 'Settings > System > Sound > Input' : 'your sound settings';

@@ -372,11 +372,66 @@ fn set_typing(app: AppHandle, window: WebviewWindow, on: bool) {
 /// Runs the voice helper in a one-shot permission mode and returns what it printed.
 fn helper_perms(args: &[&str]) -> Value {
     let Some(bin) = voice_binary() else { return json!({ "type": "perms", "unsupported": true }) };
-    let out = hide_console(&mut Command::new(bin)).args(args).stdin(Stdio::null()).stderr(Stdio::null()).output();
-    out.ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .and_then(|t| t.lines().rev().find_map(|l| serde_json::from_str::<Value>(l).ok()))
-        .unwrap_or_else(|| json!({ "type": "perms", "error": true }))
+    let out = match hide_console(&mut Command::new(bin)).args(args).stdin(Stdio::null()).stderr(Stdio::null()).output() {
+        Ok(o) => o,
+        Err(e) => return json!({ "type": "perms", "error": true, "spawn": e.to_string() }),
+    };
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .rev()
+        .find_map(|l| serde_json::from_str::<Value>(l).ok())
+        // Said nothing: how it ended tells a missing DLL from a CPU it can't run on (#95, #128).
+        .unwrap_or_else(|| json!({ "type": "perms", "error": true, "exit": exit_info(out.status) }))
+}
+
+/// How a helper process ended, for diagnostics.
+pub(crate) fn exit_info(status: std::process::ExitStatus) -> Value {
+    #[cfg(unix)]
+    let signal = std::os::unix::process::ExitStatusExt::signal(&status);
+    #[cfg(not(unix))]
+    let signal: Option<i32> = None;
+    exit_json(status.code(), signal)
+}
+
+fn exit_json(code: Option<i32>, signal: Option<i32>) -> Value {
+    let mut v = json!({ "code": code, "signal": signal });
+    if let Some(c) = code.filter(|c| *c < 0) {
+        // Windows crash codes are NTSTATUS values; their hex form is what people search for.
+        v["hex"] = json!(format!("{:#010X}", c as u32));
+    }
+    let meaning = match code.map(|c| c as u32) {
+        Some(0xC000_001D) => Some("illegal instruction: the CPU lacks an instruction the helper uses"),
+        Some(0xC000_0135) => Some("a DLL it needs is missing"),
+        Some(0xC000_007B) => Some("a DLL it loaded is the wrong build"),
+        Some(0xC000_0139) => Some("a DLL it loaded is missing a function (often an old Visual C++ runtime)"),
+        Some(0xC000_0005) => Some("access violation (crashed)"),
+        Some(0xC000_0409) => Some("stack buffer overrun or fast-fail (crashed)"),
+        _ => None,
+    };
+    if let Some(m) = meaning {
+        v["meaning"] = json!(m);
+    }
+    v
+}
+
+#[cfg(test)]
+mod exit_tests {
+    use super::*;
+
+    #[test]
+    fn windows_crash_codes_are_named() {
+        let v = exit_json(Some(0xC000_001Du32 as i32), None);
+        assert_eq!(v["code"], json!(-1073741795));
+        assert_eq!(v["hex"], json!("0xC000001D"));
+        assert!(v["meaning"].as_str().unwrap().starts_with("illegal instruction"));
+        assert_eq!(exit_json(Some(0xC000_0135u32 as i32), None)["meaning"], json!("a DLL it needs is missing"));
+    }
+
+    #[test]
+    fn plain_exits_and_signals_stay_plain() {
+        assert_eq!(exit_json(Some(1), None), json!({ "code": 1, "signal": null }));
+        assert_eq!(exit_json(None, Some(4)), json!({ "code": null, "signal": 4 }));
+    }
 }
 
 /// What the shell knows for a diagnostics report (the sidecar writes it): screens, the tray icon, the panel, the
@@ -418,6 +473,7 @@ fn diagnostics(app: &AppHandle) -> Value {
         "voice_helper": voice_binary().map(|p| p.exists()),
         "hands_helper": helper_binary("clanky-hands").map(|p| p.exists()),
         "voice_running": app.state::<Voice>().0.lock().map(|v| v.is_some()).unwrap_or(false),
+        "voice_exit": voice::last_voice_exit(),
         "permissions": perms,
         "microphones": mics,
     })
