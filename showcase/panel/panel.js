@@ -745,26 +745,24 @@
     }));
     return g;
   }
-  // VoiceStudio on this computer: whether it's ready (or exactly why not), its engine, the voice, and Check again.
+  // Kokoro on this computer: whether it's ready (or exactly why not), its engine, the voice, and Check again.
   function studioRows() {
     const vs = state.studio ?? { checking: true };
-    const status = vs.checking ? 'Checking VoiceStudio…' : vs.ok ? `Connected${vs.engine ? ` · ${vs.engine}` : ''}` : vs.message || "VoiceStudio isn't available.";
+    const status = vs.checking ? 'Checking Kokoro…' : vs.ok ? `Ready${vs.engine ? ` · ${vs.engine}` : ''}` : vs.message || "Kokoro isn't available.";
     const voices = vs.voices ?? [];
     return [
       el('div', { className: 'setting' },
-        el('span', {}, 'VoiceStudio', el('small', { className: vs.ok || vs.checking ? '' : 'bad', textContent: status, role: vs.ok || vs.checking ? null : 'alert' })),
-        el('span', { className: 'row-btns' }, link('Check again', () => act('voicestudio_check'), { k: 'voicestudio_check', aria: 'Check VoiceStudio again' }))),
+        el('span', {}, 'Kokoro', el('small', { className: vs.ok || vs.checking ? '' : 'bad', textContent: status, role: vs.ok || vs.checking ? null : 'alert' })),
+        el('span', { className: 'row-btns' }, link('Check again', () => act('voicestudio_check'), { k: 'voicestudio_check', aria: 'Check Kokoro again' }))),
       vs.ok ? el('div', { className: 'reveal', 'data-anim': 'studio-voice' },
         el('p', { className: 'sub', textContent: `Voice for ${personaLabel()} (each personality keeps its own)` }),
         el('span', { className: 'px field select' },
-          el('select', { 'aria-label': 'VoiceStudio voice', 'data-k': 'studiovoice', on: { change: (e) => act(`studiovoice:${e.target.value}`) } },
-            el('option', { value: 'default', textContent: 'Engine default', selected: !vs.voice || !voices.some((x) => x.id === vs.voice) }),
+          el('select', { 'aria-label': 'Kokoro voice', 'data-k': 'studiovoice', on: { change: (e) => act(`studiovoice:${e.target.value}`) } },
             voices.map((x) => el('option', { value: x.id, textContent: x.name, selected: x.id === vs.voice })))),
-        voices.length ? null : el('p', { className: 'why', textContent: 'Save a voice in VoiceStudio (clone or design one) to pick it here.' }),
       ) : null,
     ];
   }
-  const TTS_NAMES = { fish: 'Fish Audio', gemini: 'Gemini', voicestudio: 'VoiceStudio' };
+  const TTS_NAMES = { fish: 'Fish Audio', gemini: 'Gemini', voicestudio: 'Kokoro' };
   // How loud I am: my voice and my sounds together (#136). Moving it shows the level; letting go saves it.
   function volumeRow() {
     const said = el('p', { className: 'why', 'aria-hidden': 'true' });
@@ -783,7 +781,7 @@
   }
   function speakingPage() {
     // The service that speaks, each with its own key: Fish Audio's voice is the personality's and it has models to pick
-    // from; Gemini has a list of voices and two models; VoiceStudio runs on this computer and needs no key.
+    // from; Gemini has a list of voices and two models; Kokoro runs on this computer and needs no key.
     const tts = TTS_NAMES[state.tts] ? state.tts : 'fish', T = TTS_NAMES[tts], local = tts === 'voicestudio', hasKey = local || !!state[`${tts}Key`];
     // Gemini can speak with the key the AI already has (the Model page), until the voice gets one of its own.
     const shared = tts === 'gemini' && hasKey && !!state.geminiShared;
@@ -798,12 +796,12 @@
         picks('Voice provider', Object.entries(TTS_NAMES), tts, (x) => {
           if (x !== 'voicestudio' && !state[`${x}Key`]) { ui.key = x; note(`Add a ${TTS_NAMES[x]} key to hear me talk.`); } // its key field opens with it
           act(`tts:${x}`);
-        }, 'tts', { fish: 'A voice for each personality, acted out with feeling. Billed to your Fish Audio account.', gemini: "Google's voices: one of 30 for each personality. The free allowance runs out after a few replies; with billing on, it costs a fraction of a cent per reply.", voicestudio: 'The free VoiceStudio app on this computer, in the engine and voices you set up there. Nothing leaves your computer.' }),
+        }, 'tts', { fish: 'A voice for each personality, acted out with feeling. Billed to your Fish Audio account.', gemini: "Google's voices: one of 30 for each personality. The free allowance runs out after a few replies; with billing on, it costs a fraction of a cent per reply.", voicestudio: 'Kokoro: a free voice model on this computer, a voice for each personality. A 100 MB download the first time; no key, no limit, nothing leaves your computer.' }),
         local ? el('div', { className: 'reveal', 'data-anim': 'studio' }, studioRows()) : null,
         local ? el('div', { className: 'reveal', 'data-anim': 'studio-speak' },
           el('p', { className: 'sub', textContent: 'How much it speaks' }),
           picks('How much it speaks', [['short', 'Short'], ['medium', 'Medium'], ['full', 'Everything']], state.voice?.studioSpeak ?? 'short', (x) => act(`studiospeak_${x}`), 'studiospeak'),
-          el('p', { className: 'why wrap', textContent: 'VoiceStudio is slow. The full answer always shows as text.' })) : null,
+          el('p', { className: 'why wrap', textContent: 'The full answer always shows as text.' })) : null,
         tts === 'gemini' && hasKey && state.geminiVoices?.length ? el('div', { className: 'reveal', 'data-anim': 'gemini-voice' },
           el('p', { className: 'sub', textContent: `Voice for ${personaLabel()} (each personality keeps its own)` }),
           el('span', { className: 'px field select' },
@@ -1319,12 +1317,12 @@
     if (q.get('note') === 'bad') setTimeout(() => window.__panel({ kind: 'note', text: "That key didn't save (E30). Try again.", bad: true, copy: true }), 400);
     if (q.get('update') === 'failed') s.update.result = { ok: false, error: "Couldn't check for updates. Check your internet." };
     if (q.has('checking')) s.update.checking = true;
-    // ?studio: VoiceStudio is the voice provider (?studio=off: it isn't running; ?studio=engine: its engine isn't ready; ?studio=empty: no saved voices).
+    // ?studio: Kokoro is the voice provider (?studio=off: still getting ready; ?studio=engine: it failed).
     const STUDIO = {
       on: { ok: true, engine: 'OmniVoice', voices: [{ id: 'a642d572', name: 'Ben' }, { id: 'fa08aff1', name: 'British · Female · Young Adult · High' }], voice: 'fa08aff1' },
       empty: { ok: true, engine: 'KittenTTS', voices: [], voice: null },
-      off: { ok: false, reason: 'offline', message: 'Run VoiceStudio first.' },
-      engine: { ok: false, reason: 'engine', message: "VoiceStudio's voice engine isn't ready (CosyVoice): not installed. Pick or install an engine in VoiceStudio, then press Check again." },
+      off: { ok: false, reason: 'offline', message: 'Kokoro is getting ready (the first time it downloads its 100 MB voice model). Give it a moment, then press Check again.' },
+      engine: { ok: false, reason: 'engine', message: 'Kokoro ran into a problem: the model could not load.' },
     };
     if (q.has('studio')) Object.assign(s, { tts: 'voicestudio', studio: STUDIO[q.get('studio')] ?? STUDIO.on });
     if (q.has('uptodate')) s.update.result = { ok: true, at: Date.now() + 60e3 };
