@@ -31,6 +31,8 @@
   const G = (R.ghost = {
     color: 'ivory',
     colorOf: (p) => PERSONA_GHOST[p] ?? 'ivory',
+    // The bubble's accent strip: the ghost's body colour; tangerine for Classic (its ivory would vanish on oat).
+    accent: () => ({ ivory: '#F2A65A', cobalt: '#3468CE', green: '#30945F', pink: '#FF4F9A' })[G.color],
     setPersonality(p) { G.color = G.colorOf(p); },
     dark: () => darkMQ.matches,
     ready: () => !!man,

@@ -1,11 +1,18 @@
-// The card look shared by the Sidekick's own UI (bubbles, the thinking tag, task tags, the step list): the same
-// stepped corners, dark glass, teal edge, glint and Martian Mono as the drawings' cards (ink.js) and the reminders.
+// The card look shared by the Sidekick's own UI (bubbles, the thinking tag, task tags, the step list) and the drawings'
+// cards (ink.js): the design tokens' "pocket handheld" surface (design/DESIGN.md). Solid oat paper, a 1.5 px ink edge,
+// radius 6 and a short hard shadow; no blur, no glass, no glow. Tangerine marks the one thing to look at, never body text.
 (() => {
   const R = window.Clanky;
   if (!R || typeof document === 'undefined') return;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const ACC = '#78ffe2', HOT = '#e6fffa', MID = '#28c4b8', DEEP = '#0e5c60', EDGE = 'rgba(3,39,34,0.6)';
-  const GLASS = 'rgba(6,22,24,0.94)', TEXT = '#dcfff6', DIM = '#8ab8b0', CORAL = '#ff8a7a', NOTE = '#e9a196';
+  // Tokens (design/tokens.json): oat paper, ink text and edges, tangerine accent, rust for errors.
+  const OAT = '#F3EBDD', OAT2 = '#E8DFCF', INK = '#2A2420', INK_SOFT = '#5E5248', TANGERINE = '#F2A65A', RUST = '#B5534A', RUST_TEXT = '#8E3A33';
+  const SKY = '#A9CBE3', BUTTER = '#F6E3A1', SAGE = '#A8BFA0';
+  // The names the rest of the overlay uses: ACC the accent, HOT the focus ring, MID/DEEP quieter accents, EDGE the
+  // pale casing under free strokes, GLASS the card fill, TEXT/DIM body and secondary text, CORAL/NOTE errors.
+  const ACC = TANGERINE, HOT = TANGERINE, MID = INK_SOFT, DEEP = OAT2, EDGE = OAT;
+  const GLASS = OAT, TEXT = INK, DIM = INK_SOFT, CORAL = RUST, NOTE = RUST_TEXT;
+  const SHADOW = 'rgba(42,36,32,0.22)', RADIUS = 6;
   const MONO = '"Martian Mono", "Clanky Arabic", ui-monospace, monospace';
   const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
   const rgba = (h, a) => `rgba(${hex(h).join(',')},${a})`;
@@ -33,15 +40,38 @@
     pts.splice(after + 1, 0, ...t);
     return pts;
   }
-  const steppedPath = (x, y, w, h, c, tail) => { const p = new Path2D(); stepped(x, y, w, h, c, tail).forEach((q, i) => (i ? p.lineTo(q[0], q[1]) : p.moveTo(q[0], q[1]))); p.closePath(); return p; };
+  // The surface's outline: corners rounded to RADIUS (the `c` callers pass sets the room kept clear for a tail), and
+  // the stepped tail (3 pixel steps) where one is asked for.
+  const steppedPath = (x, y, w, h, c = 8, tail = null) => {
+    const pts = stepped(x, y, w, h, c, tail), r = Math.min(RADIUS, w / 2, h / 2), p = new Path2D();
+    // Corner points in stepped(): each corner is the 5 points around one of the box's corners; keep the tail's.
+    const box = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+    const near = (q) => box.findIndex(([bx, by]) => Math.abs(q[0] - bx) <= c + 0.01 && Math.abs(q[1] - by) <= c + 0.01);
+    const tailPts = pts.filter((q) => near(q) < 0);
+    const tailAfter = tail ? { top: 0, right: 1, bottom: 2, left: 3 }[tail.side] : -1;
+    p.moveTo(x + r, y);
+    for (let i = 0; i < 4; i++) {
+      if (i === tailAfter) for (const q of tailPts) p.lineTo(q[0], q[1]);
+      const [ax, ay] = box[(i + 1) % 4], [bx, by] = box[(i + 2) % 4];
+      p.arcTo(ax, ay, bx, by, r);
+    }
+    p.closePath();
+    return p;
+  };
 
-  // Dark glass with a soft shadow, the accent edge with its glow, and a glint along the top.
+  // Oat paper with a short hard shadow and a 1.5 px ink edge. strip: a 3 px accent strip along the top inside edge
+  // with a 12 px corner tab (the bubble's: the ghost's colour, tangerine for Classic). o.edge overrides the edge colour.
   function chrome(c, x, y, w, h, o = {}) {
-    const path = o.path || steppedPath(x, y, w, h, o.corner ?? 8, o.tail), edge = o.edge || ACC;
+    const path = o.path || steppedPath(x, y, w, h, o.corner ?? 8, o.tail), edge = o.edge && o.edge !== ACC ? o.edge : INK;
     c.save();
-    c.fillStyle = GLASS; c.shadowColor = 'rgba(0,0,0,0.35)'; c.shadowBlur = 14; c.shadowOffsetY = 4; c.fill(path);
-    c.shadowColor = rgba(edge, 0.7); c.shadowBlur = 8; c.shadowOffsetY = 0; c.strokeStyle = edge; c.lineWidth = 1.5; c.globalAlpha *= 0.9; c.stroke(path);
-    if (o.glint !== false && w > 24) { c.globalAlpha *= 0.6; c.shadowBlur = 0; c.strokeStyle = '#ffffff'; c.lineWidth = 1; c.beginPath(); c.moveTo(x + 12, y + 1.5); c.lineTo(x + Math.min(w * 0.45, 90), y + 1.5); c.stroke(); }
+    c.fillStyle = SHADOW; c.translate(0, 2); c.fill(path); c.translate(0, -2);
+    c.fillStyle = o.fill || GLASS; c.fill(path);
+    if (o.strip && w > 24) {
+      c.save(); c.clip(path); c.fillStyle = o.strip;
+      c.fillRect(x, y, w, 3); c.fillRect(x + w - 12, y, 12, 12);
+      c.restore();
+    }
+    c.strokeStyle = edge; c.lineWidth = 1.5; c.stroke(path);
     c.restore();
   }
 
@@ -54,7 +84,7 @@
     const full = c.measureText(str).width, x0 = o.anchor === 'middle' ? x - full / 2 : o.anchor === 'end' ? x - full : x;
     const n = Math.floor(str.length * clamp(u, 0, 1));
     if (n >= str.length) { c.fillStyle = color; c.fillText(str, x0, y); }
-    else if (n > 0) { const head = str.slice(0, Math.max(0, n - 2)); c.fillStyle = color; c.fillText(head, x0, y); c.fillStyle = '#ffffff'; c.fillText(str.slice(head.length, n), x0 + c.measureText(head).width, y); }
+    else if (n > 0) { const head = str.slice(0, Math.max(0, n - 2)); c.fillStyle = color; c.fillText(head, x0, y); c.fillStyle = INK_SOFT; c.fillText(str.slice(head.length, n), x0 + c.measureText(head).width, y); }
     c.restore();
     return full;
   }
@@ -89,40 +119,34 @@
     const a = -2.2 + (i / 30) * Math.PI * 2, k = 1 + 0.06 * Math.sin(i * 1.7 + seed) + (i > 28 ? 0.08 : 0);
     return [cx + Math.cos(a) * r * k, cy + Math.sin(a) * r * k];
   });
-  // The pen's stroke (a dark edge so it reads on white, then the colour with a soft glow), drawn up to u of its length.
+  // A free stroke, cased: a 6 px oat stroke under the colour (2 px), so it reads on white and on dark; up to u of its length.
   function pen(c, pts, color, w = 2.2, u = 1) {
     const n = Math.max(2, Math.ceil(pts.length * clamp(u, 0, 1)));
     if (u <= 0) return;
     const path = new Path2D(); pts.slice(0, n).forEach((q, i) => (i ? path.lineTo(q[0], q[1]) : path.moveTo(q[0], q[1])));
     c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
-    c.strokeStyle = EDGE; c.lineWidth = w + 2; c.stroke(path);
-    c.shadowColor = rgba(color, 0.7); c.shadowBlur = 6; c.strokeStyle = color; c.lineWidth = w; c.stroke(path);
+    c.strokeStyle = EDGE; c.lineWidth = w + 4; c.stroke(path);
+    c.strokeStyle = color; c.lineWidth = w; c.stroke(path);
     c.restore();
   }
 
-  // A pixel button like the drawings' chips (ink.js): filled is teal with dark ink, otherwise dark glass with a teal
-  // edge and light ink. focus adds a bright ring, so the keyboard's choice shows; down presses it into its shadow.
-  const CHIP_F = `700 11px ${MONO}`, INK_DARK = '#032722';
+  // A button like the drawings' chips (ink.js): filled is tangerine with ink text (the primary), otherwise oat with an
+  // ink edge. focus adds a tangerine ring, so the keyboard's choice shows; down presses it into its hard shadow.
+  const CHIP_F = `700 11px ${MONO}`, INK_DARK = INK;
   const mix = (a, b, k) => `rgb(${hex(a).map((v, i) => Math.round(v + (hex(b)[i] - v) * k)).join(',')})`;
   const chipW = (label) => Math.round(textW(label, CHIP_F) + 22);
   function chip(c, x, y, w, h, label, o = {}) {
     c.save();
     if (o.focus) { c.strokeStyle = HOT; c.lineWidth = 2; c.stroke(steppedPath(x - 3.5, y - 3.5, w + 7, h + 9, 6)); }
     if (o.down) c.translate(0, 2);
-    c.fillStyle = o.filled ? mix(ACC, '#000000', 0.62) : 'rgba(0,0,0,0.45)'; c.fill(steppedPath(x, y + (o.down ? 1 : 3), w, h, 4));
+    c.fillStyle = SHADOW; c.fill(steppedPath(x, y + (o.down ? 1 : 2), w, h, 4));
     const face = steppedPath(x, y, w, h, 4);
-    if (o.filled) {
-      c.fillStyle = o.hover ? mix(ACC, '#ffffff', 0.3) : ACC; c.fill(face);
-      c.fillStyle = 'rgba(255,255,255,0.55)'; c.fillRect(x + 4, y + 1, w - 8, 1.5); c.fillStyle = 'rgba(3,39,34,0.25)'; c.fillRect(x + 4, y + h - 2.5, w - 8, 1.5);
-    } else {
-      c.fillStyle = GLASS; c.fill(face);
-      if (o.hover) { c.fillStyle = rgba(ACC, 0.16); c.fill(face); }
-      c.strokeStyle = ACC; c.lineWidth = 1.5; c.stroke(face);
-    }
-    c.font = CHIP_F; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = o.filled ? INK_DARK : TEXT;
+    c.fillStyle = o.filled ? (o.hover ? mix(ACC, '#ffffff', 0.2) : ACC) : o.hover ? OAT2 : GLASS; c.fill(face);
+    c.strokeStyle = INK; c.lineWidth = 1.5; c.stroke(face);
+    c.font = CHIP_F; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = INK_DARK;
     c.fillText(String(label ?? ''), x + w / 2, y + h / 2 + 0.5);
     c.restore();
   }
 
-  R.glass = { ACC, HOT, MID, DEEP, EDGE, GLASS, TEXT, DIM, CORAL, NOTE, MONO, rgba, stepped, steppedPath, chrome, textW, typed, wrapRows, ringPts, pen, chip, chipW, CHIP_H: 23 };
+  R.glass = { ACC, HOT, MID, DEEP, EDGE, GLASS, TEXT, DIM, CORAL, NOTE, MONO, OAT, OAT2, INK, INK_SOFT, TANGERINE, RUST, SKY, BUTTER, SAGE, SHADOW, rgba, stepped, steppedPath, chrome, textW, typed, wrapRows, ringPts, pen, chip, chipW, CHIP_H: 23 };
 })();
