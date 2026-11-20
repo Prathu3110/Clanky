@@ -1,0 +1,262 @@
+{
+  "cell": 32,
+  "columns": 4,
+  "baseline_offset_px": 1,
+  "scales": {
+    "default": 2,
+    "small": 1
+  },
+  "cursor": {
+    "cell": 10,
+    "scale": 2,
+    "frames": 2,
+    "ms": 400,
+    "sheet_light": "clanky-cursor-light.png",
+    "sheet_dark": "clanky-cursor-dark.png",
+    "rows": [
+      "ivory",
+      "cobalt",
+      "green",
+      "pink"
+    ]
+  },
+  "ghosts": {
+    "ivory": {
+      "personality": "Clanky (Look's own)",
+      "sheet_light": "clanky-ivory-light.png",
+      "sheet_dark": "clanky-ivory-dark.png"
+    },
+    "cobalt": {
+      "personality": "Butler",
+      "sheet_light": "clanky-cobalt-light.png",
+      "sheet_dark": "clanky-cobalt-dark.png"
+    },
+    "green": {
+      "personality": "Teacher",
+      "sheet_light": "clanky-green-light.png",
+      "sheet_dark": "clanky-green-dark.png"
+    },
+    "pink": {
+      "personality": "Sassy",
+      "sheet_light": "clanky-pink-light.png",
+      "sheet_dark": "clanky-pink-dark.png"
+    }
+  },
+  "states": [
+    {
+      "id": "idle",
+      "row": 0,
+      "frames": 4,
+      "ms": [
+        500,
+        500,
+        500,
+        140
+      ],
+      "loop": true,
+      "status": null,
+      "note": "Slow 1px bob with a hem sway; blinks on frame 4."
+    },
+    {
+      "id": "listening",
+      "row": 1,
+      "frames": 3,
+      "ms": [
+        260,
+        260,
+        260
+      ],
+      "loop": true,
+      "status": "sky",
+      "note": "Eyes widen, mouth makes a small 'o'; sound arcs pulse beside the head. Status: sky."
+    },
+    {
+      "id": "thinking",
+      "row": 2,
+      "frames": 4,
+      "ms": [
+        140,
+        140,
+        140,
+        140
+      ],
+      "loop": true,
+      "status": "butter",
+      "note": "Eyes look up, hem ripples fast, a dot-matrix '…' fills one dot at a time. Status: butter."
+    },
+    {
+      "id": "talking",
+      "row": 3,
+      "frames": 4,
+      "ms": [
+        120,
+        120,
+        120,
+        120
+      ],
+      "loop": true,
+      "status": "sky",
+      "note": "Mouth cycles closed / half / open in time with speech; tiny bob. Status: sky."
+    },
+    {
+      "id": "working",
+      "row": 4,
+      "frames": 4,
+      "ms": [
+        180,
+        180,
+        180,
+        180
+      ],
+      "loop": true,
+      "status": "tangerine",
+      "note": "Eyes glance toward the app it is driving, sparks at the hand, status light blinks. Status: tangerine."
+    },
+    {
+      "id": "pointing",
+      "row": 5,
+      "frames": 3,
+      "ms": [
+        240,
+        240,
+        240
+      ],
+      "loop": true,
+      "status": "tangerine",
+      "note": "Right arm jabs toward the target (3px -> 4px), eyes follow. Status: tangerine."
+    },
+    {
+      "id": "waiting",
+      "row": 6,
+      "frames": 3,
+      "ms": [
+        400,
+        400,
+        160
+      ],
+      "loop": true,
+      "status": "tangerine",
+      "note": "Looks at you, a '?' blinks above the head, status light pulses. Waiting for your OK. Status: tangerine."
+    },
+    {
+      "id": "done",
+      "row": 7,
+      "frames": 3,
+      "ms": [
+        180,
+        180,
+        300
+      ],
+      "loop": true,
+      "status": "sage",
+      "note": "Happy ^^ eyes, 1px hop, one sparkle. Status: sage."
+    },
+    {
+      "id": "error",
+      "row": 8,
+      "frames": 3,
+      "ms": [
+        110,
+        110,
+        500
+      ],
+      "loop": true,
+      "status": "rust",
+      "note": "Worried brows, wavy mouth, a 1px head shake and a sweat drop. Status: rust."
+    },
+    {
+      "id": "asleep",
+      "row": 9,
+      "frames": 3,
+      "ms": [
+        700,
+        700,
+        700
+      ],
+      "loop": true,
+      "status": null,
+      "note": "Eyes shut, slow breathing bob, 'z's rise and fade. Light off."
+    },
+    {
+      "id": "wave",
+      "row": 10,
+      "frames": 4,
+      "ms": [
+        200,
+        200,
+        200,
+        200
+      ],
+      "loop": true,
+      "status": "sky",
+      "note": "Right arm swings between two raised positions. Status: sky."
+    },
+    {
+      "id": "hype",
+      "row": 11,
+      "frames": 3,
+      "ms": [
+        150,
+        150,
+        150
+      ],
+      "loop": true,
+      "status": "tangerine",
+      "note": "Both arms up, hop, sparkles swap sides. Status: tangerine."
+    },
+    {
+      "id": "remind",
+      "row": 12,
+      "frames": 3,
+      "ms": [
+        260,
+        260,
+        260
+      ],
+      "loop": true,
+      "status": "butter",
+      "note": "A '!' bounces above the head while the left arm lifts like a raised finger. Status: butter."
+    },
+    {
+      "id": "motivate",
+      "row": 13,
+      "frames": 3,
+      "ms": [
+        200,
+        200,
+        300
+      ],
+      "loop": true,
+      "status": "sage",
+      "note": "Determined brows, fist-pump on the right with a pixel star. Status: sage."
+    },
+    {
+      "id": "long-wait",
+      "row": 14,
+      "frames": 4,
+      "ms": [
+        500,
+        500,
+        500,
+        500
+      ],
+      "loop": true,
+      "status": "butter",
+      "note": "Slow figure-eight drift (key poses; tween at whole pixels), eyes wander. Status: butter."
+    },
+    {
+      "id": "offline",
+      "row": 15,
+      "frames": 4,
+      "ms": [
+        700,
+        80,
+        140,
+        80
+      ],
+      "loop": true,
+      "status": "rust",
+      "note": "Ghost flicker (dithered frames), worried face, status light in rust. Pair with a 'Reconnecting…' label."
+    }
+  ]
+}

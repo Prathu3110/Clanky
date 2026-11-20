@@ -82,8 +82,6 @@
   // and key repeat all just work. Type to ask (m.bar) shows its own field beside the cursor instead (ask-bar.js).
   const field = document.createElement('input');
   Object.assign(field.style, { position: 'fixed', left: '0', top: '0', width: '1px', height: '1px', opacity: '0', pointerEvents: 'none' });
-  // Its name is its look's (the sidecar's LOOKS).
-  const NAMES = { classic: 'Clanky', jarvis: 'JARVIS', glayos: 'GlayOS', ultren: 'Ultren', anime: 'Anime Girl', sarah: 'Sarah', adrian: 'Adrian', rita: 'Rita X' };
   field.setAttribute('aria-label', 'Message for Clanky');
   field.autocomplete = 'off'; field.spellcheck = false;
   document.addEventListener('DOMContentLoaded', () => document.body.appendChild(field));
@@ -513,12 +511,8 @@
     if (m.kind === 'notch') { if (Clanky.notch) { Clanky.notch.enabled = !!m.on; if (m.style) Clanky.notch.style = m.style; if (!m.on) Clanky.notch.close(); } return; }
     if (m.kind === 'sound') { if (Clanky.sfx) Clanky.sfx.enabled = m.on; return; }
     if (m.kind === 'size') { for (const t of Clanky.tiles ?? []) t.creature.setForm?.(m.size); return; }
-    if (m.kind === 'look') {
-      for (const t of Clanky.tiles ?? []) t.creature.setLook?.(m.look);
-      field.setAttribute('aria-label', `Message for ${NAMES[m.look] ?? NAMES.classic}`);
-      if (Clanky.notch) { Clanky.notch.name = NAMES[m.look] ?? NAMES.classic; Clanky.notch.look = m.look; }
-      return;
-    }
+    // The personality picks the ghost's colour (ghost.js), here and in the notch's lens.
+    if (m.kind === 'personality') { Clanky.ghost?.setPersonality(m.personality); return; }
     if (!getAgent()) return;
     if (m.kind === 'agents') {
       // A launch flies out of the visible Clanky (or from the cursor); the hatch, when there is one, wins.

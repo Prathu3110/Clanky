@@ -2,13 +2,13 @@
 // of popping up beside the cursor.
 // A black capsule pours out of the notch (it starts exactly the notch's size, so it reads as the notch itself
 // growing), spreads sideways with a little spring, and drops open when there's something to read. When the turn is
-// over it folds back the same way and disappears into the notch. Inside: a small live JARVIS globe (jarvis.js, the
+// over it folds back the same way and disappears into the notch. Inside: the small live ghost (ghost.js, the
 // same renderer as the sidekick), what it's doing, and the reply as it streams.
 // Two styles (R.notch.style): 'drop' (the default) is a capsule that pours out of the notch like water, a liquid
 // neck stretching and splitting off with a couple of droplets, floats just under the notch and plays with the cursor
 // (the lens watches it, a click folds the reply away or opens it again), then rises back and melts
 // into the notch the same way. 'spread' widens sideways out of the notch instead.
-// The lens shows whichever look is picked (JARVIS's globe, a person, or the Clanky blob). While it speaks, a true
+// The lens shows the ghost (ghost.js) in the personality's colour. While it speaks, a true
 // waveform of its own voice (voice-out.js samples) runs in the status slot; while it listens, one that follows the mic.
 // Screens without a notch get the same capsule hanging from the top edge, with nothing to hide in at rest.
 // The overlay is click-through, so the host asks Clanky.notchHit(x, y) whether the cursor is over it.
@@ -22,9 +22,6 @@
 
   // ---------- look ----------
   const INK = '#dcfff6', ACCENT = '#78ffe2';
-  // The LED levels JARVIS is drawn in (12-sidekick.js), level 0 never drawn here: the capsule is the dark.
-  const PAL = [null, 'rgb(14,92,96)', 'rgb(40,196,184)', 'rgb(120,255,226)', 'rgb(230,255,250)'];
-  const L = PAL.length - 1;
   // Fillet where the capsule meets the top edge, flowing into the screen like the notch's own corners.
   const FILLET = 9;
   // Compact: the notch plus a wing either side for the globe and the status. Open: wide enough to read.
@@ -81,7 +78,7 @@
 /* The pill (its black, glow and contents) stays above the card while it slides out from under it. */
 .nc.drop .nc-skin, .nc.drop .nc-row { z-index: 1; }
 .nc.drop .nc-skin { background: #000; }
-.nc.drop .nc-globe { width: 30px; height: 30px; border-radius: 50%; background: radial-gradient(circle, #0b1626 0, #000 72%);
+.nc.drop .nc-globe { width: 32px; height: 32px; border-radius: 50%; background: radial-gradient(circle, #0b1626 0, #000 72%);
   box-shadow: 0 0 0 2px #070a12, 0 0 0 3.5px rgba(255, 255, 255, .08), inset 0 0 6px #000; }
 
 /* The concave corners either side, so the capsule flows out of the top edge instead of sitting under it. */
@@ -137,7 +134,7 @@
 .nc.closing .nc-row, .nc.closing .nc-body { opacity: 0; transition: opacity .1s ease; }
 /* desktop.html pins every canvas to the page's top-left (the sidekick's stage): not these. */
 .nc canvas { position: static; left: auto; top: auto; transform: none; will-change: auto; cursor: inherit; touch-action: auto; }
-.nc-globe { flex: none; width: 28px; height: 28px; image-rendering: pixelated; }
+.nc-globe { flex: none; width: 32px; height: 32px; image-rendering: pixelated; }
 .nc-status { flex: none; display: flex; align-items: center; gap: 8px; color: var(--ink); text-shadow: 0 0 10px rgba(0, 30, 90, .55); white-space: nowrap; max-width: 300px;
   overflow: hidden; text-overflow: ellipsis; }
 .nc.full .nc-status { max-width: none; }
@@ -220,7 +217,7 @@
   sr.setAttribute('role', 'status');
   const announce = (t) => { sr.textContent = ''; setTimeout(() => { sr.textContent = String(t ?? '').replace(/\*\*|__|`|^#+\s*/gm, ''); }, 60); };
   el.innerHTML = '<div class="nc-skin" aria-hidden="true"><i class="nc-glow l"></i><i class="nc-glow r"></i></div>'
-    + '<div class="nc-row"><span class="nc-mark">JARVIS</span><canvas class="nc-globe" aria-hidden="true"></canvas>'
+    + '<div class="nc-row"><span class="nc-mark">Clanky</span><canvas class="nc-globe" aria-hidden="true"></canvas>'
     + '<div class="nc-status"><canvas class="nc-wave" aria-hidden="true"></canvas><span class="nc-label"></span></div></div>'
     + '<div class="nc-body"><p class="nc-text"></p><div class="nc-choices" hidden></div><div class="nc-rate" hidden></div></div>';
   // The goo: blurred, then its alpha thresholded, so shapes that touch melt into one (metaballs). The notch, a tongue,
@@ -481,54 +478,19 @@
   // It takes clicks only while it has buttons or something to read (hovering keeps it open).
   const hot = (on) => el.classList.toggle('hot', !!on);
 
-  // ---------- the globe ----------
-  const CELLS = 28;
+  // ---------- the lens: the ghost (ghost.js), on the capsule's black, so always its dark sheet ----------
+  const CELLS = 32;
   const gctx = globe.getContext('2d');
+  const LENS_STATE = { listen: 'listening', talk: 'talking', think: 'thinking', tool: 'working', done: 'done', error: 'error' };
   const drawGlobe = (dt) => {
-    const dpr = devicePixelRatio || 1, px = Math.max(1, Math.round(dpr));
-    if (globe.width !== CELLS * px) { globe.width = globe.height = CELLS * px; }
+    const dpr = devicePixelRatio || 1;
+    if (globe.width !== CELLS * dpr) { globe.width = globe.height = CELLS * dpr; }
+    gctx.setTransform(1, 0, 0, 1, 0, 0);
     gctx.clearRect(0, 0, globe.width, globe.height);
-    const buf = new Map();
-    const put = (x, y, l) => {
-      const gx = Math.round(x), gy = Math.round(y);
-      if (gx < 0 || gy < 0 || gx >= CELLS || gy >= CELLS) return;
-      const k = gy * CELLS + gx;
-      if ((buf.get(k) ?? 0) < l) buf.set(k, l);
-    };
-    const playing = R.voiceOut?.playing?.();
-    jst.dt = dt; jst.t += dt;
-    jst.mode = st.mode === 'error' ? null : playing ? 'talk' : st.mode === 'tool' ? 'think' : st.mode;
-    jst.voice = playing ? R.voiceOut.level() : null;
-    jst.heard = st.mic;
-    jst.happy = st.mode === 'done' ? 0.6 : 0;
-    jst.mouth = playing ? (jst.voice > 0.35 ? 'talk2' : jst.voice > 0.08 ? 'talk1' : null) : st.mode === 'error' ? 'frown' : null;
-    jst.brow = st.mode === 'think' || st.mode === 'tool' ? 'raised' : null;
-    const k = { put, L, th: () => 0 };
-    const person = R.people?.[st.look];
-    // The lens shows whoever was picked: JARVIS's globe, a person (head and shoulders), or the Clanky's blob.
-    if (person) person.body(k, CELLS / 2 - 0.5, CELLS / 2 + 3, 10, jst);
-    else if (st.look === 'jarvis' || !st.look || !R.jarvis) R.jarvis?.body(k, CELLS / 2 - 0.5, CELLS / 2 - 0.5, 10.5, jst);
-    else blob(put, jst);
-    for (const [k, l] of buf) {
-      gctx.fillStyle = PAL[clamp(l, 1, L)];
-      gctx.fillRect((k % CELLS) * px, Math.floor(k / CELLS) * px, px, px);
-    }
-  };
-
-  // The original Clanky in the lens: a glowing goo blob that breathes and talks, two dark eyes that blink and look.
-  const blob = (put, s) => {
-    const c = CELLS / 2 - 0.5, v = s.voice ?? (s.mode === 'listen' ? s.heard * 0.6 : 0);
-    const rx = 9 + v * 1.4, ry = 8.2 - v * 0.6 + 0.3 * Math.sin(s.t * 2.2), cy = c + 1.5;
-    const ex = Math.round(s.look[0] * 1.6), ey = Math.round(s.look[1] * 1.2), blink = (s.t % 4.2) < 0.12;
-    for (let y = -11; y <= 11; y++) for (let x = -11; x <= 11; x++) {
-      const d = (x * x) / (rx * rx) + (y * y) / (ry * ry);
-      if (d > 1) continue;
-      // Eyes: holes in the light (2 tall, 1 when blinking); the mouth opens with the voice.
-      const eye = (x === -3 + ex || x === 3 + ex) && (blink ? y === -1 + ey : y >= -2 + ey && y <= -1 + ey);
-      const mouth = v > 0.1 && x >= -1 && x <= 1 && y >= 2 && y <= 2 + Math.round(v * 2.5);
-      if (eye || mouth) continue;
-      put(c + x, cy + y, d < 0.35 ? 4 : d < 0.7 ? 3 : 2);
-    }
+    gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    jst.t += dt;
+    const state = R.voiceOut?.playing?.() ? 'talking' : LENS_STATE[st.mode] ?? 'idle';
+    R.ghost?.draw(gctx, CELLS / 2, CELLS / 2, { state, t: jst.t, scale: 1, dark: true, dpr, reduced: matchMedia('(prefers-reduced-motion: reduce)').matches });
   };
 
   // ---------- the waveform ----------
@@ -802,10 +764,9 @@
   R.notch = {
     enabled: false,
     get style() { return drop() ? 'drop' : 'spread'; },
-    // The name on the capsule: the look's own (JARVIS, Clanky, …).
-    set name(v) { $('.nc-mark').textContent = String(v || 'JARVIS'); if (st.open) apply(shape); },
-    // The look in the lens: 'jarvis', a person ('anime', 'sarah', 'adrian', 'rita', 'ultren', 'glayos'), or 'classic' (the Clanky blob).
-    set look(v) { st.look = String(v || 'jarvis'); jst.swing = null; },
+    // The name on the capsule.
+    set name(v) { $('.nc-mark').textContent = String(v || 'Clanky'); if (st.open) apply(shape); },
+    set look(v) {}, // one look now: the ghost, coloured by the personality (ghost.js)
     set style(v) {
       const d = v === 'drop';
       if (d === drop()) return;

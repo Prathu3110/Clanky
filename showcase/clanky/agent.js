@@ -1086,6 +1086,16 @@
       ghost: () => pen.held,
       // A bubble is up: emotes keep their gestures but drop icons and particles, so the text stays readable.
       calm: () => !!(b && !b.closing),
+      // The ghost's sprite state (ghost.js) for what this layer is doing, or null when it isn't doing anything.
+      state: () => {
+        if (pen.held) return 'pointing';
+        if (b?.input?.listen) return 'listening';
+        if (b?.input?.choices) return 'waiting';
+        if (tool) return tool.status === 'fail' ? 'error' : tool.status === 'ok' ? 'done' : tool.target ? 'pointing' : 'working';
+        if (b?.kind === 'thought' && !b.closing) { b.thinkSince ??= now; return now - b.thinkSince > 8 ? 'long-wait' : 'thinking'; }
+        if (b?.kind === 'speech' && !b.closing && (R.voiceOut?.playing?.() || b.shown < b.text.length)) return 'talking';
+        return null;
+      },
       hit: (x, y) => hitBubble(b, x, y),
       press: (x, y) => {
         if (!b) return;
@@ -1118,7 +1128,7 @@
       },
     };
     // The voice's feeling (voice-out.js feel()) on the face while it talks: the eyes (the kit's face moods), the brows
-    // and the mouth between words. Every look draws these its own way (JARVIS, with no face, by its heart and a tremor).
+    // and the mouth between words. The ghost shows them through its sprite states.
     const FEEL = {
       joy: { face: 'happy', rest: 'grin' },
       laugh: { face: 'happy', brow: 'raised', rest: 'grin' },
