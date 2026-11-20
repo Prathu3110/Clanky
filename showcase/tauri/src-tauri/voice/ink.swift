@@ -1,5 +1,5 @@
-// Drawing on the screen while talking. While ⌃⌥ is held, moving the cursor draws teal pen strokes (tapered,
-// faster = thinner, with a soft glow) on a see-through panel over every screen: circle something, no clicking.
+// Drawing on the screen while talking. While ⌃⌥ is held, moving the cursor draws ink pen strokes (tapered,
+// faster = thinner, cased in oat) on a see-through panel over every screen: circle something, no clicking.
 // A stroke counts only once it closes round something: it snaps shut (a glow pulse, a soft click, a trackpad tick)
 // and stays. One circle per talk: after it snaps, the cursor stops drawing until the keys are let go. Lines and
 // scribbles that never close fade on their own and are never sent. When the talk ends, the part of the screen with
@@ -8,8 +8,9 @@
 import AppKit
 import QuartzCore
 
-private let accent = CGColor(srgbRed: 0x78 / 255, green: 1, blue: 0xe2 / 255, alpha: 1)
-private let rim = CGColor(srgbRed: 0x03 / 255, green: 0x27 / 255, blue: 0x22 / 255, alpha: 0.6)
+// Design tokens: a cased stroke, ink over an oat casing, so it reads on any app; no glow.
+private let accent = CGColor(srgbRed: 0x2A / 255, green: 0x24 / 255, blue: 0x20 / 255, alpha: 1)
+private let rim = CGColor(srgbRed: 0xF3 / 255, green: 0xEB / 255, blue: 0xDD / 255, alpha: 1)
 
 /// One pen stroke: points in its view's coordinates (top-left origin), drawn as a filled, tapered outline.
 final class InkStroke {
@@ -21,11 +22,11 @@ final class InkStroke {
     init() {
         edge.fillColor = nil
         edge.strokeColor = rim
-        edge.lineWidth = 2.5
+        edge.lineWidth = 4
         edge.lineJoin = .round
         fill.fillColor = accent
         fill.shadowColor = accent
-        fill.shadowOpacity = 0.75
+        fill.shadowOpacity = 0
         fill.shadowRadius = 6
         fill.shadowOffset = .zero
         group.addSublayer(edge)

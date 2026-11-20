@@ -67,7 +67,8 @@
         if (!quiet) S(name);
       };
       let wasFlung = false, wasAsleep = false, snoreT = 3;
-      const spawn = (x, y, vx, vy, g, lvl, size = 0, rate = 1) => parts.push({ x, y, vx, vy, g, lvl, size, rate, life: 1 });
+      // The old LED sparks and pixel dust are gone: the design's only transition is the ghost's own dither wipe.
+      const spawn = () => {};
       let P = 4, gw = 0, gh = 0, IW = 0, IH = 0, R = 40, t = 0, dripT = 0.6;
       const off = document.createElement('canvas');
       const octx = off.getContext('2d');
@@ -128,7 +129,13 @@
         return 'idle';
       };
       // How much of it shows: a Bayer dither in and out while it materializes or leaves that way (1 = all of it).
-      const ghostShow = () => (pres.v === 'materialize' && pres.state === 'in' ? pres.u : pres.v === 'materialize' && pres.state === 'out' ? 1 - pres.u : 1);
+      // Every show, hide and hop is the design's Bayer dither wipe (the old CRT switch-on is gone).
+      const ghostShow = () => {
+        if (bl) return bl.dir === 'out' ? 1 - bl.u : bl.u;
+        if (pres.v !== 'drop' && pres.state === 'in') return pres.u;
+        if (pres.v !== 'drop' && pres.state === 'out') return 1 - pres.u;
+        return 1;
+      };
       const ghostKey = (env) => {
         const g = GH();
         if (!g) return 0;
@@ -263,19 +270,8 @@
         if (bl.u < 1) return;
         if (bl.dir === 'out') { blinkMid(); bl.dir = 'in'; bl.u = 0; } else blinkCut();
       };
-      // CRT: scale the finished frame around the body; returns null when not playing.
-      const crtXform = () => {
-        if (!bl && (pres.v !== 'crt' || (pres.state !== 'in' && pres.state !== 'out'))) return null;
-        const u = bl ? bl.u : pres.u;
-        if ((bl ? bl.dir : pres.state) === 'in') {
-          if (u < 0.28) { const a = smooth(u / 0.28); return { sx: a * 1.25, sy: 0.03, line: 1, flash: 1, dot: 0 }; }
-          if (u < 0.75) { const b = smooth((u - 0.28) / 0.47); return { sx: 1.25 - 0.29 * b, sy: 0.03 + 1.11 * b, line: 1 - b, flash: 1 - b * 0.7, dot: 0 }; }
-          const c = smooth((u - 0.75) / 0.25); return { sx: 0.96 + 0.04 * c, sy: 1.14 - 0.14 * c, line: 0, flash: 0.3 * (1 - c), dot: 0 };
-        }
-        if (u < 0.42) { const a = smooth(u / 0.42); return { sx: 1 + 0.3 * a, sy: 1 - 0.97 * a, line: a, flash: a * 0.9, dot: 0 }; }
-        if (u < 0.78) { const b = smooth((u - 0.42) / 0.36); return { sx: 1.3 * (1 - b), sy: 0.03, line: 1, flash: 0.9, dot: b }; }
-        const c = (u - 0.78) / 0.22; return { sx: 0, sy: 0.03, line: 0, flash: 0, dot: 1 - c };
-      };
+      // The CRT scale effect is retired; kept as a null hook so the draw path stays as it was.
+      const crtXform = () => null;
 
       // Morph between its size and its cursor form (for drawings). The body has no in-between sizes, so the finished
       // frame is scaled, squashed and turned around the body point (like the CRT effect), and the form swaps at the

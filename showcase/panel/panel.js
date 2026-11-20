@@ -1181,7 +1181,7 @@
   const body = $('frame');
   body.addEventListener('animationend', (e) => {
     if (e.target !== body) return;
-    if (e.animationName === 'crt-on' && body.classList.contains('opening')) body.classList.remove('opening');
+    if ((e.animationName === 'crt-on' || e.animationName === 'crt-on-up') && body.classList.contains('opening')) body.classList.remove('opening');
     else if (e.animationName === 'crt-off' && body.classList.contains('shutting')) { body.classList.remove('shutting'); body.classList.add('shut'); }
   });
   window.__panelOpen = (fromBottom = false) => {

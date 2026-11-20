@@ -26,19 +26,22 @@ html, body { height: 100%; background: transparent; }
 /* Above the icon (a taskbar at the bottom): it opens from its bottom edge. */
 .frame.from-bottom { transform-origin: 50% 100%; }
 
-/* Opening: a bright line at the icon's edge that opens out into the panel, like a CRT switching on. */
+/* Opening and closing: a stepped wipe from the icon's edge (design motion: open 240 ms, close in --shut, no flash).
+   The names stay crt-on/crt-off because panel.js and main.rs wait on them. */
 .frame.opening { animation: crt-on var(--open) steps(8, end) both; }
 @keyframes crt-on {
-  0% { transform: scaleY(0.012); filter: brightness(2.6); opacity: 0.4; }
-  40% { transform: scaleY(1.01); filter: brightness(1.5); opacity: 1; }
-  100% { transform: none; filter: none; opacity: 1; }
+  0% { clip-path: inset(0 0 100% 0); opacity: 0.6; }
+  100% { clip-path: inset(0 0 0 0); opacity: 1; }
 }
-/* Closing: it folds back into the line and goes dark. */
+.frame.from-bottom.opening { animation-name: crt-on-up; }
+@keyframes crt-on-up {
+  0% { clip-path: inset(100% 0 0 0); opacity: 0.6; }
+  100% { clip-path: inset(0 0 0 0); opacity: 1; }
+}
 .frame.shutting { animation: crt-off var(--shut) steps(5, end) both; pointer-events: none; }
 @keyframes crt-off {
-  0% { transform: none; filter: none; opacity: 1; }
-  60% { transform: scaleY(0.012); filter: brightness(2.6); opacity: 1; }
-  100% { transform: scaleY(0.012) scaleX(0); opacity: 0; }
+  0% { clip-path: inset(0 0 0 0); opacity: 1; }
+  100% { clip-path: inset(0 0 100% 0); opacity: 0; }
 }
 .frame.shut { opacity: 0; }
 
@@ -133,7 +136,7 @@ html, body { height: 100%; background: transparent; }
 .navi .dot { display: none; width: 6px; height: 6px; margin-inline-start: auto; background: var(--accent); }
 .navi.flag .dot { display: block; }
 .navi.ping { animation: navi-ping 240ms steps(3, end); }
-@keyframes navi-ping { 0% { filter: brightness(1.9); } 100% { filter: none; } }
+@keyframes navi-ping { 0% { background: var(--accent); } 100% { background: transparent; } }
 
 /* ---------- panes ---------- */
 /* Pages fit the window: long lists show a page at a time with arrows in the page's footer. A page of settings taller

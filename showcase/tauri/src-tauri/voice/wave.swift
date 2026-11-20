@@ -52,20 +52,17 @@ final class Wave {
         let root = view.layer!
         let pill = CAShapeLayer()
         pill.path = Self.pixelPill(CGRect(origin: .zero, size: size).insetBy(dx: 0.5, dy: 0.5))
-        pill.fillColor = CGColor(srgbRed: 0x05 / 255, green: 0x12 / 255, blue: 0x14 / 255, alpha: 0.94)
-        pill.strokeColor = CGColor(srgbRed: 0x4f / 255, green: 0xbf / 255, blue: 0xa9 / 255, alpha: 1)
-        pill.lineWidth = 1
+        // Design tokens: sky (listening) with an ink edge and ink bars, no glow.
+        pill.fillColor = CGColor(srgbRed: 0xA9 / 255, green: 0xCB / 255, blue: 0xE3 / 255, alpha: 1)
+        pill.strokeColor = CGColor(srgbRed: 0x2A / 255, green: 0x24 / 255, blue: 0x20 / 255, alpha: 1)
+        pill.lineWidth = 1.5
         root.addSublayer(pill)
         let host = CALayer()
         host.frame = root.bounds
-        host.shadowColor = CGColor(srgbRed: 0x78 / 255, green: 1, blue: 0xe2 / 255, alpha: 1)
-        host.shadowOpacity = 0.8
-        host.shadowRadius = 3
-        host.shadowOffset = .zero
         root.addSublayer(host)
         let bars: [CALayer] = (0 ..< Self.shape.count).map { _ in
             let b = CALayer()
-            b.backgroundColor = CGColor(srgbRed: 0x78 / 255, green: 1, blue: 0xe2 / 255, alpha: 1)
+            b.backgroundColor = CGColor(srgbRed: 0x2A / 255, green: 0x24 / 255, blue: 0x20 / 255, alpha: 1)
             host.addSublayer(b)
             return b
         }

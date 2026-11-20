@@ -395,7 +395,8 @@
     const colW = (t) => fontPx(t) * 0.7 + 0.35;
     // Body text in ink; code and links in the secondary ink (links underlined): accents never go on body text.
     const TEXT_INK = '#2A2420', TEXT_ACCENT = '#5E5248';
-    const T = () => clamp(k.P * 0.42, 1.4, 2.4);
+    // Fixed to the design's bubble type, 14 px on a 22 px line (fontPx 14, CH * T 22), whatever the body's size.
+    const T = () => 2.2;
     const G = R.glass;
     // Padding inside a bubble. The thinking tag is slim, one line, with its three dots before the words.
     const DOTS_W = 24;
@@ -697,7 +698,8 @@
       const P = k.P, t = T(), dpr = env.dpr || 1, cw = colW(t), lh = CH * t;
       const fade = bb.closing ? clamp(1 - bb.closing / 0.25, 0, 1) : clamp((bb.age - 0.08) / 0.2, 0, 1);
       if (fade <= 0 || bb.pop.x < 0.6) return;
-      const ix = fr.x + padX(bb) + dotsDx(bb), iy = fr.y + padY(bb);
+      // On whole device pixels: a part-pixel spot resamples the type and blurs it.
+      const ix = Math.round((fr.x + padX(bb) + dotsDx(bb)) * dpr) / dpr, iy = Math.round((fr.y + padY(bb)) * dpr) / dpr;
       const iw = bb.cols * cw, ih = bb.rows * lh;
       const pw = Math.ceil(iw * dpr) + 2, phh = Math.ceil(ih * dpr) + 2;
       if (tcan.width !== pw || tcan.height !== phh) { tcan.width = pw; tcan.height = phh; }
