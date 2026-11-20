@@ -373,10 +373,12 @@
       // where the body point (m.x, m.y) is in it.
       kit.sprite = () => {
         if (!lastEnv || pres.state !== 'shown') return null;
-        const env = lastEnv, dpr = env.dpr || 1, keep = face.open, out = [];
+        const env = lastEnv, dpr = env.dpr || 1, keep = face.open, out = [], g = GH();
+        // Every frame of the ghost's current state, so the native follower plays the loop instead of a still.
+        const ms = g?.ready() && !env.reduced ? g.timing(ghostState(env)) : [0, 0];
         let r = null;
-        for (const open of [1, 0]) {
-          face.open = open;
+        for (let i = 0; i < ms.length; i++) {
+          if (g?.ready() && !env.reduced) g.force = i;
           r = self.prepare(env);
           if (!r) break;
           const cv = document.createElement('canvas');
@@ -386,9 +388,10 @@
           self.draw(c2, env);
           out.push(cv.toDataURL('image/png').slice(22));
         }
+        if (g) g.force = null;
         face.open = keep;
         if (!r || out.length < 2) return null;
-        return { open: out[0], shut: out[1], w: r.x1 - r.x0, h: r.y1 - r.y0, ax: m.x - r.x0, ay: m.y - r.y0 };
+        return { open: out[0], shut: out[1], frames: out, ms, w: r.x1 - r.x0, h: r.y1 - r.y0, ax: m.x - r.x0, ay: m.y - r.y0 };
       };
       const swapForm = (f) => { form = f; if (lastEnv) self.resize(lastEnv); };
       const plug = o.plugin ? o.plugin(kit) : null;

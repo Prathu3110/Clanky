@@ -39,9 +39,13 @@
     // underneath, where that glow reads as blur, so the overlay always uses the crisp light sheets (ink outline).
     dark: () => !ON_SCREEN && darkMQ.matches,
     ready: () => !!man,
+    // A state's per-frame times (ms), for the native follower to play the same loop; force pins a frame while it's captured.
+    timing: (id) => (states.get(id) ?? states.get('idle'))?.ms ?? [500],
+    force: null,
     // The frame of a state at time t (seconds), by its own per-frame times; frame 0 under reduced motion.
     frame(id, t, reduced) {
       const s = states.get(id) ?? states.get('idle');
+      if (G.force != null) return G.force;
       if (!s || reduced) return 0;
       let ms = (t * 1000) % s.total;
       for (let i = 0; i < s.ms.length; i++) { if (ms < s.ms[i]) return i; ms -= s.ms[i]; }

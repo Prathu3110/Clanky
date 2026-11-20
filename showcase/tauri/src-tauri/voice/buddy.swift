@@ -1,5 +1,5 @@
 // The Clanky's cursor form while it just follows the cursor, drawn here instead of in the web overlay. The page
-// hands over a picture of itself (eyes open and shut) and its follow rules; this moves it on the display's own clock,
+// hands over its animation frames (or a still with eyes open and shut) and its follow rules; this moves it on the display's own clock,
 // which costs a small fraction of repainting a web view at 120 Hz. The page
 // takes it back for anything else (talking, cards, being clicked or dragged) and keeps the same follow maths, so the
 // handover doesn't jump. Never takes the mouse.
@@ -13,6 +13,8 @@ final class Buddy: NSObject {
     private let panel: NSPanel
     private let body = CALayer()
     private var open: CGImage?, shut: CGImage?
+    // The ghost's current loop (every frame and its time in ms), played here so it keeps moving while it follows.
+    private var frames: [CGImage] = [], frameMs: [Double] = []
     private var on = false, paused = true, hidden = false
     // Body point (where the cursor-form arrow sits), in global top-left points like the page's own maths.
     private var x = 0.0, y = 0.0, vx = 0.0, vy = 0.0, ox = 0.0, oy = 0.0, side = 1.0, high = false
@@ -55,6 +57,8 @@ final class Buddy: NSObject {
         guard let img = m["img"] as? [String: Any], let o = Self.image(img["open"]) else { return }
         open = o
         shut = Self.image(img["shut"]) ?? o
+        frames = (img["frames"] as? [Any])?.compactMap { Self.image($0) } ?? []
+        frameMs = (img["ms"] as? [NSNumber])?.map { $0.doubleValue } ?? []
         w = (img["w"] as? NSNumber)?.doubleValue ?? Double(o.width) / 2
         h = (img["h"] as? NSNumber)?.doubleValue ?? Double(o.height) / 2
         ax = (img["ax"] as? NSNumber)?.doubleValue ?? w / 2
@@ -178,8 +182,9 @@ final class Buddy: NSObject {
         CATransaction.commit()
     }
 
-    /// A blink every few seconds, like the page's face.
+    /// The ghost's loop, frame by frame on its own times; without one (reduced motion), a blink every few seconds.
     private func blink() {
+        if frames.count > 1, frames.count == frameMs.count, frameMs.allSatisfy({ $0 > 0 }) { blinkID += 1; play(0, blinkID); return }
         blinkID += 1
         let id = blinkID
         DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 2 ... 5.5)) { [weak self] in
@@ -190,6 +195,15 @@ final class Buddy: NSObject {
                 self.setFace(self.open)
                 self.blink()
             }
+        }
+    }
+
+    private func play(_ i: Int, _ id: Int) {
+        guard on, blinkID == id else { return }
+        setFace(frames[i])
+        DispatchQueue.main.asyncAfter(deadline: .now() + frameMs[i] / 1000) { [weak self] in
+            guard let self else { return }
+            self.play((i + 1) % self.frames.count, id)
         }
     }
 
