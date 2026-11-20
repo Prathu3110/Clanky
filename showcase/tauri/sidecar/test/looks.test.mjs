@@ -34,8 +34,10 @@ for (const [, id, label] of looks) assert.ok(guide.includes(`['${id}', '${label}
   assert.match(set, /v\.say\(LOOK_GREETINGS\[l\]\)/);
   // Each talks its own way, in the full prompt and in Lite mode, and the prompt names every look.
   assert.deepEqual(Object.keys(obj(side, 'LOOK_STYLE')), looks.map((m) => m[1]), 'a talking style for every look');
-  assert.match(side, /Personality: \$\{LOOK_STYLE\[config\.look\] \?\? LOOK_STYLE\.classic\}/);
-  assert.match(side, /style: LOOK_STYLE\[config\.look\]/);
+  // Both prompts take the picked personality, else the look's own style.
+  assert.match(side, /const styleNow = \(\) => PERSONALITIES\.find\(\(\[id\]\) => id === config\.personality\)\?\.\[2\] \?\? LOOK_STYLE\[config\.look\] \?\? LOOK_STYLE\.classic;/);
+  assert.match(side, /Personality: \$\{styleNow\(\)\}/);
+  assert.match(side, /style: styleNow\(\),/);
   assert.match(side, /your name and your voice: \$\{LOOKS\.slice\(0, -1\)/);
 }
 
