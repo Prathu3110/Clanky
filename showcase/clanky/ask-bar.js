@@ -21,7 +21,7 @@
 
   const LINE = 18, LINES = 5;
   const css = `
-.ab { --ink: #e8fffa; --ink-2: #b4d8d1; --ink-3: #8ab8b0; --accent: #78ffe2; --line-hi: #2f7c74; --line-hot: #4fbfa9; --s: 2px;
+.ab { --ink: #2A2420; --ink-2: #3A322C; --ink-3: #5E5248; --accent: #F2A65A; --line-hi: #C9BDAD; --line-hot: #2A2420; --s: 2px;
   --notch: polygon(
     calc(var(--s) * 2) 0, calc(100% - var(--s) * 2) 0, calc(100% - var(--s) * 2) var(--s), calc(100% - var(--s)) var(--s),
     calc(100% - var(--s)) calc(var(--s) * 2), 100% calc(var(--s) * 2), 100% calc(100% - var(--s) * 2),
@@ -30,10 +30,10 @@
     calc(var(--s) * 2) calc(100% - var(--s)), var(--s) calc(100% - var(--s)), var(--s) calc(100% - var(--s) * 2),
     0 calc(100% - var(--s) * 2), 0 calc(var(--s) * 2), var(--s) calc(var(--s) * 2), var(--s) var(--s), calc(var(--s) * 2) var(--s));
   position: fixed; left: 0; top: 0; z-index: 6; width: 320px; max-width: calc(100vw - 16px); box-sizing: border-box; padding: 2px;
-  background: var(--line-hot); color: #051214; clip-path: var(--notch); cursor: text; will-change: transform;
+  background: var(--line-hot); color: #2A2420; clip-path: var(--notch); cursor: text; will-change: transform;
   opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .14s cubic-bezier(.2, .8, .2, 1), visibility 0s .14s; }
 .ab.on { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity .14s cubic-bezier(.2, .8, .2, 1); }
-.ab-in { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; background: rgba(5, 18, 20, .97); color: var(--ink); clip-path: var(--notch); }
+.ab-in { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; background: #F3EBDD; color: var(--ink); clip-path: var(--notch); }
 .ab-mark { flex: none; width: 6px; height: 6px; margin-top: 6px; background: var(--accent); box-shadow: 0 0 6px var(--accent); }
 .ab-in .ab-text { display: block; flex: 1; min-width: 0; height: 18px; box-sizing: border-box; margin: 0; padding: 0; border: 0; border-radius: 0;
   resize: none; overflow-x: hidden; overflow-y: hidden; overflow-wrap: anywhere; overscroll-behavior: contain;
@@ -45,7 +45,7 @@
 .ab-in .ab-text::placeholder { color: var(--ink-3); opacity: 1; }
 /* 12.5px, as in the capsule: at 13.5px the dots under a final ي fall outside the 18px line and are cut off. */
 .ab-in .ab-text:dir(rtl) { font-size: 12.5px; font-family: "Clanky Arabic RTL", "Martian Mono", "Clanky Arabic", ui-monospace, Menlo, monospace; }
-.ab-in .ab-text::selection { background: #1f5f58; color: #e8fffa; }
+.ab-in .ab-text::selection { background: #F6E3A1; color: #2A2420; }
 @media (prefers-reduced-motion: reduce) { .ab, .ab.on { transition: none; } }
 @media (forced-colors: active) { .ab { clip-path: none; padding: 0; border: 2px solid CanvasText; } .ab-in { clip-path: none; } .ab-mark { background: CanvasText; box-shadow: none; } }
 `;
