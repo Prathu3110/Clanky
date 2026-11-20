@@ -30,7 +30,7 @@ import {
 } from './store.mjs';
 import { feedbackOf, foldInput, rateTarget, foldPrompt, lessonInput, lessonPrompt, memoryInput, memoryPrompt, oneShot, parseBrain, parseLesson, parseSkill, shouldLearn, skillInput, skillPrompt, soundsWrong, transcript } from './brain.mjs';
 import { lessonsFor, lessonsLine } from './graph.mjs';
-import { createLaya, pickKinds, trace as layaTrace } from './laya.mjs';
+import { createLaya, lastTurnTools, pickKinds, trace as layaTrace } from './laya.mjs';
 import { briefNote } from './brief.mjs';
 import { CHECK_MS, DEFAULT_DISTRACTIONS, check as focusCheck, parseDistractions, startBlock } from './focus.mjs';
 import { saveCardImage } from './cardimage.mjs';
@@ -796,9 +796,9 @@ The <live-state> block at the top of the user's newest message is the current st
 let lastFactIds = [];
 let frontNow = ''; // set just before each request (whereNow)
 let lessonsNow = []; // Clanky: graph lessons for the front app, set just before each request (graph.mjs)
-// Clanky: Laya in shadow mode (laya.mjs). It decides beside jobKinds(); only the trace uses its answer for now.
+// Clanky: Laya (laya.mjs) decides beside jobKinds() and, when sure, adds kinds the words alone miss (follow-ups).
 const laya = createLaya();
-let layaNow = null, layaApp = null, turnTools = [], recentTools = [];
+let layaNow = null, layaApp = null, turnTools = [], lastTurn = null; // lastTurn: { at, tools } of the previous request
 const crewLine = () => { const t = crewText(crewNow(), (sp) => modelName(sp.model), config.delegate); return t ? `${t}\n` : ''; };
 const livePrompt = (context = '') => {
   const facts = pickFacts(context, 40), total = listFacts().length;
@@ -1427,7 +1427,7 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
   // Clanky: Laya decides before routing (laya.mjs). Capped so a slow front-app lookup never holds the request up.
   turnTools = []; layaNow = null; layaApp = null;
   if (turnWords) {
-    const asked = frontData().catch(() => null).then((f) => { layaApp = f?.bundle ?? null; return laya.ask({ text: turnWords, app: layaApp, recentTools }); });
+    const asked = frontData().catch(() => null).then((f) => { layaApp = f?.bundle ?? null; return laya.ask({ text: turnWords, app: layaApp, recentTools: lastTurnTools(lastTurn) }); });
     layaNow = await Promise.race([asked, new Promise((r) => setTimeout(() => r(null), 150))]);
   }
   const handoff = routeForTurn(turnWords || '(system)');
@@ -1601,7 +1601,7 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
     logLine('request_done', { turn, ms: Date.now() - use.t, calls: use.calls, tools: use.tools, in: use.in, cacheRead: use.cacheRead, cacheWrite: use.cacheWrite, out: use.out });
     if (turnWords) {
       layaTrace({ t: use.t, text: turnWords, app: layaApp, regex: jobKinds(turnWords), laya: layaNow, used: pickKinds(jobKinds(turnWords), layaNow), tools: turnTools, truth: [...new Set(turnTools.map(kindOfTool).filter(Boolean))], model: config.model, ms: Date.now() - use.t, in: use.in, cacheRead: use.cacheRead, cacheWrite: use.cacheWrite, out: use.out });
-      recentTools = [...recentTools, ...turnTools].slice(-8);
+      lastTurn = { at: Date.now(), tools: turnTools };
     }
   } catch (err) {
     lastFailed = true;

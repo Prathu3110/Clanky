@@ -1,6 +1,6 @@
-// Clanky: Laya, the gate in front of the regex router (laya/ at the repo root). Shadow mode for now: Laya decides on
-// every request next to jobKinds(), only the regex answer is used, and both go to laya-trace.jsonl with the tools the
-// turn really used. Those tools are the ground truth (route.mjs kindOfTool), so the trace grades Laya for free.
+// Clanky: Laya, the gate in front of the regex router (laya/ at the repo root). It decides on every request next to
+// jobKinds(); when it's sure, its kinds are added to the regex router's (pickKinds), and both go to laya-trace.jsonl
+// with the tools the turn really used. Those tools are the ground truth (route.mjs kindOfTool), so the trace grades Laya for free.
 // Everything fails soft: no binary, a crash or a slow answer is just "no decision".
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -8,6 +8,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { DIR } from './store.mjs';
+import { KINDS } from './route.mjs';
 
 const TIMEOUT_MS = 50; // Laya must be faster than this to be worth asking
 export const TRACE = path.join(DIR, 'laya-trace.jsonl');
@@ -50,9 +51,14 @@ export function createLaya({ bin = binPath(), spawnImpl = spawn, timeoutMs = TIM
   };
 }
 
-export const LAYA_ON = 0.6; // Laya's kinds route the request only at or above this confidence
-/** The kinds that route this request: Laya's when it's sure, the regex router's otherwise. */
-export const pickKinds = (regexKinds, decision, threshold = LAYA_ON) => (decision && decision.confidence >= threshold ? decision.kinds : regexKinds);
+export const LAYA_ON = 0.6; // Laya's kinds count only at or above this confidence
+/** The kinds that route this request: the regex router's, plus Laya's when it's sure (it adds what the words alone
+ *  can't show, like a follow-up to the last job; it never removes one), in the router's order. */
+export const pickKinds = (regexKinds, decision, threshold = LAYA_ON) => (decision && decision.confidence >= threshold
+  ? KINDS.filter((k) => regexKinds.includes(k) || decision.kinds.includes(k)) : regexKinds);
+const FOLLOW_UP_MS = 10 * 60_000; // a turn older than this isn't what "do it again" means
+/** The previous turn's tools for Laya, or none when that turn was too long ago. */
+export const lastTurnTools = (last, now = Date.now()) => (last && now - last.at < FOLLOW_UP_MS ? last.tools : []);
 
 /** One line per request: what each router said, and what the turn really did. Kept local, private (0600). */
 export async function trace(entry, file = TRACE) {

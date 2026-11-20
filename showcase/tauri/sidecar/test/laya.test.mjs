@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
-import { createLaya, pickKinds, trace } from '../laya.mjs';
+import { createLaya, lastTurnTools, pickKinds, trace } from '../laya.mjs';
 
 // A fake Laya: answers each line with `answer(request)`, after `delay` ms (or never when it returns undefined).
 function fake(answer, delay = 0) {
@@ -60,12 +60,16 @@ function fake(answer, delay = 0) {
 
 // Routing: Laya's kinds only when it's sure; unsure, missing or the stub's 0 confidence leaves the regex router in charge.
 {
-  assert.deepEqual(pickKinds(['code'], { kinds: ['computer'], confidence: 0.9 }), ['computer']);
-  assert.deepEqual(pickKinds(['code'], { kinds: ['computer'], confidence: 0.6 }), ['computer'], 'threshold is inclusive');
+  assert.deepEqual(pickKinds(['code'], { kinds: ['computer'], confidence: 0.9 }), ['computer', 'code'], 'Laya adds, in router order');
+  assert.deepEqual(pickKinds(['code'], { kinds: ['computer'], confidence: 0.6 }), ['computer', 'code'], 'threshold is inclusive');
+  assert.deepEqual(pickKinds(['draw'], { kinds: ['draw'], confidence: 0.9 }), ['draw'], 'no duplicates');
   assert.deepEqual(pickKinds(['code'], { kinds: ['computer'], confidence: 0.59 }), ['code']);
   assert.deepEqual(pickKinds(['code'], { kinds: [], confidence: 0 }), ['code'], 'the stub never routes');
   assert.deepEqual(pickKinds(['code'], null), ['code'], 'no Laya');
-  assert.deepEqual(pickKinds(['code'], { kinds: [], confidence: 0.95 }), [], 'a sure "plain chat" wins too');
+  assert.deepEqual(pickKinds(['code'], { kinds: [], confidence: 0.95 }), ['code'], 'Laya never removes a kind');
+  assert.deepEqual(lastTurnTools({ at: 0, tools: ['draw'] }, 60_000), ['draw']);
+  assert.deepEqual(lastTurnTools({ at: 0, tools: ['draw'] }, 11 * 60_000), [], 'too long ago');
+  assert.deepEqual(lastTurnTools(null), []);
 }
 
 // The trace: one private JSON line per entry.
