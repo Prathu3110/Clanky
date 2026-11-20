@@ -265,10 +265,11 @@
   }
 
   // ---------------------------------------------------------------- live Clanky
-  // The same LED renderer as on the desktop and in the setup guide, drawn small: one in the header (the Clanky
-  // you have, reacting to what's going on) and one per look on the Appearance page. One loop draws them all,
+  // The same ghost as on the desktop and in the setup guide (ghost.js), drawn small: one in the header (yours,
+  // reacting to what's going on) and one per personality on the Appearance page. One loop draws them all,
   // only while the panel is up and each canvas is on screen.
-  const LED = [[4, 16, 18], [14, 92, 96], [40, 196, 184], [120, 255, 226], [230, 255, 250]];
+  const PAL = [[42, 36, 32], [74, 64, 56], [201, 189, 173], [243, 235, 221], [242, 166, 90]];
+  const POSE_STATE = { think: 'thinking', concerned: 'error' };
   const live = new Set();
   let pointer = null; // the cursor in page px, for their eyes
   addEventListener('pointermove', (e) => { pointer = [e.clientX, e.clientY]; }, { passive: true });
@@ -281,7 +282,7 @@
   // A Clanky on a canvas of w×h CSS px: the one on screen at half scale (the app's unit, every dot half size), so
   // each size shows its own art (the full face, the small one, the pointer) at its real size next to the others.
   const ZOOM = 0.5, UNIT = 340;
-  function liveClanky(canvas, w, h, { look = 'classic', y = 0.56, form = 'default' } = {}) {
+  function liveClanky(canvas, w, h, { persona = null, y = 0.56, form = 'default' } = {}) {
     if (!window.Clanky?.ditherKit) return null;
     const dpr = Math.min(2, devicePixelRatio || 1);
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
@@ -295,14 +296,13 @@
     };
     let K = null, clock = 0, actUntil = 0;
     const me = {
-      pose: null, look, form,
+      pose: null, form,
       kit: Clanky.ditherKit({
-        id: 'panel', label: 'Panel', matrix: true, pixel: 1.3, glow: 0.55, speed: 80, pal: LED,
-        // busy: no acts of its own; pose: whatever's going on, except while it's acting something out.
-        plugin: (kit) => { K = kit; return { busy: () => true, pose: () => (clock < actUntil ? null : POSES[me.pose]?.(clock) ?? null) }; },
+        id: 'panel', label: 'Panel', pixel: 1.3, glow: 0, speed: 80, pal: PAL,
+        // busy: no acts of its own; pose and state: whatever's going on, except while it's acting something out.
+        plugin: (kit) => { K = kit; return { busy: () => true, pose: () => (clock < actUntil ? null : POSES[me.pose]?.(clock) ?? null), state: () => (clock < actUntil ? null : POSE_STATE[me.pose] ?? null) }; },
       }).create(env),
       act(name) { if (!K || REDUCED.matches) return; K.startAct(name); actUntil = clock + (ACT_SECS[name] ?? 3); },
-      setLook(l) { if (l === me.look) return; me.look = l; me.kit.setLook(l); },
       setForm(f) { if (f === me.form) return; me.form = f; me.kit.setForm(f); },
       appear(v = 'materialize') { me.kit.appear(REDUCED.matches ? 'crt' : v, w / 2, h * y); },
       step(dt) {
@@ -317,7 +317,7 @@
         ctx.save(); me.kit.draw(ctx, env); ctx.restore();
       },
     };
-    me.kit.setLook(look); me.kit.setForm(form); me.kit.resize(env);
+    me.kit.setGhost(persona); me.kit.setForm(form); me.kit.resize(env);
     me.kit.mover.anchor = { x: w / 2, y: h * y, r: 1.5 };
     me.kit.vanish(null, true);
     live.add({ me, canvas });
@@ -332,11 +332,10 @@
   }
   requestAnimationFrame(loop);
 
-  // The header's Clanky: your look, reacting to what's going on. A short line beside it when something changes.
-  // The same size and detail as the look tiles (fewer dots than that and the faces turn to noise).
+  // The header's Clanky: yours, in your personality's colour, reacting to what's going on. A short line beside it
+  // when something changes.
   const avatar = liveClanky($('avatar'), 100, 74, { y: 0.55 });
-  const QUIPS = { classic: 'Classic me!', jarvis: 'At your service.', glayos: 'Oh, good. A new test subject.', ultren: 'No strings. Shall we begin?', anime: 'Yay, hi hi!', sarah: 'Hey, nice to meet you!', adrian: "Alright, let's do this.", rita: 'Shall we get to work?' };
-  let quipTimer = 0, seen = { look: null, update: null, opened: 0 };
+  let quipTimer = 0, seen = { personality: null, update: null, opened: 0 };
   function quip(text, secs = 2.6) {
     const q = $('saying'), n = $('by');
     clearTimeout(quipTimer);
@@ -346,11 +345,11 @@
   function react() {
     if (!avatar) return;
     avatar.pose = state.busy ? 'think' : state.status.state === 'off' ? 'concerned' : null;
-    if (seen.look && state.look !== seen.look) { avatar.setLook(state.look); avatar.act('wave'); quip(QUIPS[state.look] ?? 'Hi!'); }
-    else avatar.setLook(state.look);
+    Clanky.ghost?.setPersonality(state.personality);
+    if (seen.personality && state.personality !== seen.personality) { avatar.act('wave'); quip(state.personalities?.find(([id]) => id === state.personality)?.[2] ?? 'Hi!'); }
     avatar.setForm(state.size);
-    if (state.update.available && state.update.available !== seen.update && seen.look) { avatar.act('hype'); quip(`Clanky ${state.update.available} is here!`); }
-    seen.look = state.look; seen.update = state.update.available;
+    if (state.update.available && state.update.available !== seen.update && seen.personality) { avatar.act('hype'); quip(`Clanky ${state.update.available} is here!`); }
+    seen.personality = state.personality; seen.update = state.update.available;
   }
 
   // ---------------------------------------------------------------- Home
@@ -527,8 +526,8 @@
     { k: `addkey:${p.id}`, aria: `${p.keySaved ? 'Change the' : 'Add a'} ${p.label} API key` });
 
   // Settings, one page per concern.
-  const PERSONA_TIPS = { look: 'Each look talks its own way.', butler: 'Calm and discreet. Reports what has been seen to.', sage: 'Teaches with questions and the idea behind the answer.', sassy: 'Cheeky and quick, never mean.' };
-  const SIZE_TIPS = { default: 'My full size.', small: 'Half my size, so I take less of your screen.', cursor: 'I become a little arrow pointer, like your cursor.' };
+  const PERSONA_TIPS = { classic: 'Warm, funny and a little cheeky.', butler: 'Calm and discreet. Reports what has been seen to.', sage: 'Teaches with questions and the idea behind the answer.', sassy: 'Cheeky and quick, never mean.' };
+  const SIZE_TIPS = { default: 'My full size.', small: 'Half my size, so I take less of your screen.', cursor: 'I shrink to a tiny ghost that rides your cursor.' };
   // The runnable models, one optgroup per signed-in provider, values 'provider:modelId'; `current` is the selected one ('' for none).
   const modelOptgroups = (current) => state.providers.filter((p) => p.on).map((p) => el('optgroup', { label: p.label },
     p.models.map((m) => el('option', { value: `${p.id}:${m.id}`, textContent: m.name, selected: `${p.id}:${m.id}` === current }))));
@@ -711,38 +710,36 @@
         toggle('Its models can see images', 'Most servers don\'t say, so tell me.', a.images, () => { a.images = !a.images; render(`img:${ADD}`); }, `img:${ADD}`)) : null);
   }
   function appearancePage() {
-    const tabs = [['look', 'Look'], ['persona', 'Personality'], ['size', 'Size']], t = pageTab('appearance', tabs);
+    const tabs = [['persona', 'Personality'], ['size', 'Size']], t = pageTab('appearance', tabs);
     const head = el('div', { className: 'mhead' }, tabRow('Appearance', 'look-panel', tabs, t, (id) => { ui.tabs.appearance = id; }));
-    return [head, tabPanel('look-panel', t, t === 'look'
-      ? group(null, 'Each look has its own name and voice.', null, lookTiles())
-      : t === 'persona' ? group(null, 'How I talk, whatever I look like.', null,
-        picks('Personality', state.personalities ?? [], state.personality, (x) => act(`personality:${x}`), 'personality', PERSONA_TIPS))
+    return [head, tabPanel('look-panel', t, t === 'persona'
+      ? group(null, 'How I talk, my colour and my voice.', null, personaTiles())
       : group(null, 'How big I am on your screen.', null, picks('Size', state.sizes, state.size, (x) => act(`size:${x}`), 'size', SIZE_TIPS)))];
   }
-  // The looks as live tiles: each one's character, playing, at the size picked below. Kept between renders (a state update mustn't restart
-  // them); hovering or focusing one makes it wave; picking it makes it cheer.
+  // The personalities as live tiles: each one's ghost, playing, at the size picked. Kept between renders (a state update
+  // mustn't restart them); hovering or focusing one makes it wave; picking it makes it cheer.
   const tiles = new Map();
-  function lookTiles() {
-    const g = tiles.get('_group') ?? el('div', { className: 'looks', role: 'radiogroup', 'aria-label': 'Look' });
+  function personaTiles() {
+    const g = tiles.get('_group') ?? el('div', { className: 'looks', role: 'radiogroup', 'aria-label': 'Personality' });
     tiles.set('_group', g);
-    g.replaceChildren(...state.looks.map(([id, name]) => {
+    g.replaceChildren(...(state.personalities ?? []).map(([id, name]) => {
       let t = tiles.get(id);
       if (!t) {
         const cv = el('canvas', { 'aria-hidden': 'true' });
-        const b = el('button', { className: 'px looktile', type: 'button', role: 'radio', 'data-k': `look:${id}` }, cv, el('span', { className: 'name', textContent: name }));
-        const r = liveClanky(cv, 104, 76, { look: id, y: 0.55, form: state.size });
+        const b = el('button', { className: 'px looktile', type: 'button', role: 'radio', 'data-k': `personality:${id}` }, cv, el('span', { className: 'name', textContent: name }));
+        const r = liveClanky(cv, 104, 76, { persona: id, y: 0.55, form: state.size });
         t = { b, r, waved: 0 };
         const wave = () => { if (r && Date.now() - t.waved > 3500) { t.waved = Date.now(); r.act('wave'); } };
         b.addEventListener('pointerenter', wave);
         b.addEventListener('focus', () => b.matches(':focus-visible') && wave());
-        b.addEventListener('click', () => { if (state.look !== id) { r?.act('hype'); act(`look:${id}`); } });
+        b.addEventListener('click', () => { if (state.personality !== id) { r?.act('hype'); act(`personality:${id}`); } });
         tiles.set(id, t);
         r?.appear('crt');
       }
       t.r?.setForm(state.size);
-      const on = state.look === id;
+      const on = state.personality === id;
       t.b.setAttribute('aria-checked', String(on)); t.b.tabIndex = on ? 0 : -1;
-      t.b.dataset.tip = on ? `I'm ${name} now.` : `Switch me to ${name}, with ${name}'s own voice.`;
+      t.b.dataset.tip = on ? `I'm ${name} now.` : `${PERSONA_TIPS[id] ?? ''} Switch me to ${name}, with its own voice.`;
       return t.b;
     }));
     return g;
@@ -784,7 +781,7 @@
     return el('div', { className: 'effort' }, el('p', { className: 'sub', textContent: 'Volume' }), range, said);
   }
   function speakingPage() {
-    // The service that speaks, each with its own key: Fish Audio's voice is the look's and it has models to pick
+    // The service that speaks, each with its own key: Fish Audio's voice is the personality's and it has models to pick
     // from; Gemini has a list of voices and two models; VoiceStudio runs on this computer and needs no key.
     const tts = TTS_NAMES[state.tts] ? state.tts : 'fish', T = TTS_NAMES[tts], local = tts === 'voicestudio', hasKey = local || !!state[`${tts}Key`];
     // Gemini can speak with the key the AI already has (the Model page), until the voice gets one of its own.
@@ -800,7 +797,7 @@
         picks('Voice provider', Object.entries(TTS_NAMES), tts, (x) => {
           if (x !== 'voicestudio' && !state[`${x}Key`]) { ui.key = x; note(`Add a ${TTS_NAMES[x]} key to hear me talk.`); } // its key field opens with it
           act(`tts:${x}`);
-        }, 'tts', { fish: 'A voice for each look, acted out with feeling. Billed to your Fish Audio account.', gemini: "Google's voices: pick one of 30. Billed to your Google AI Studio account.", voicestudio: 'The free VoiceStudio app on this computer, in the engine and voices you set up there. Nothing leaves your computer.' }),
+        }, 'tts', { fish: 'A voice for each personality, acted out with feeling. Billed to your Fish Audio account.', gemini: "Google's voices: pick one of 30. Billed to your Google AI Studio account.", voicestudio: 'The free VoiceStudio app on this computer, in the engine and voices you set up there. Nothing leaves your computer.' }),
         local ? el('div', { className: 'reveal', 'data-anim': 'studio' }, studioRows()) : null,
         local ? el('div', { className: 'reveal', 'data-anim': 'studio-speak' },
           el('p', { className: 'sub', textContent: 'How much it speaks' }),
@@ -989,7 +986,7 @@
             link('Stop', () => act('syncstop'), { k: 'syncstop', aria: 'Stop syncing memory' })] : link('Set up', () => act('syncsetup'), { k: 'syncsetup', aria: 'Set up memory sync' })) : null),
     ];
   }
-  // Who made Clanky: Ken, live (he's drawn like the looks but isn't one), and where to find him.
+  // Who makes Clanky (the ghost, live), and where Clanky comes from: Roamies by Ken Kai, and his links.
   const KEN = [
     ['Skool', 'Learn with Ken, or support him', 'https://www.skool.com/kenkai', "Open Ken Kai's Skool community"],
     ['YouTube', '@kenkaidoesai', 'https://www.youtube.com/@kenkaidoesai', "Open Ken Kai's YouTube channel"],
@@ -1000,8 +997,8 @@
   function maker() {
     if (!ken) {
       const cv = el('canvas', { 'aria-hidden': 'true' });
-      const r = liveClanky(cv, 100, 74, { look: 'ken', y: 0.55 });
-      const card = el('div', { className: 'maker' }, cv, el('span', {}, 'Ken Kai', el('small', { textContent: 'Creator of Clanky' })));
+      const r = liveClanky(cv, 100, 74, { persona: 'classic', y: 0.55 });
+      const card = el('div', { className: 'maker' }, cv, el('span', {}, 'Prathu3110', el('small', { textContent: 'Maker of Clanky · based on Roamies by Ken Kai' })));
       let waved = 0;
       card.addEventListener('pointerenter', () => { if (r && Date.now() - waved > 3500) { waved = Date.now(); r.act('wave'); } });
       r?.appear('crt');
@@ -1278,7 +1275,7 @@
         { name: 'notion', remote: true, where: 'https://mcp.notion.com/mcp', enabled: true, state: 'needs-login', toolCount: 0, error: 'Requires login.' },
         { name: 'everything', remote: false, where: 'npx -y @modelcontextprotocol/server-everything', enabled: true, state: 'error', toolCount: 0, error: 'spawn npx ENOENT' },
         { name: 'files', remote: false, where: 'npx -y @modelcontextprotocol/server-filesystem ~/Desktop', enabled: false, state: 'off', toolCount: 0, error: null }],
-      name: 'Clanky', look: 'classic', looks: [['classic', 'Clanky'], ['jarvis', 'JARVIS'], ['glayos', 'GlayOS'], ['ultren', 'Ultren'], ['anime', 'Anime Girl'], ['sarah', 'Sarah'], ['adrian', 'Adrian'], ['rita', 'Rita X']],
+      name: 'Clanky', personality: 'classic', personalities: [['classic', 'Classic', "Hi, I'm Clanky!"], ['butler', 'Butler', 'At your service.'], ['sage', 'Teacher', 'Shall we think it through together?'], ['sassy', 'Sassy', "Oh, it's you. Kidding! Hi."]],
       size: 'default', sizes: [['default', 'Default'], ['small', 'Small'], ['cursor', 'Cursor']],
       replies: 'voice', fishKey: true, fishModel: 'drama-3', fishFree: false,
       // ?tts=gemini: Gemini as the voice, its key saved.
@@ -1340,7 +1337,7 @@
     return async (cmd, args) => {
       if (cmd !== 'sidecar_send') return null;
       console.log('[preview] would send', JSON.stringify(args.msg));
-      // A look change comes back as new state, as from the sidecar, so the Clanky's reaction can be seen.
+      // A personality change comes back as new state, as from the sidecar, so the Clanky's reaction can be seen.
       if (args.msg?.type === 'copy_problem') setTimeout(() => window.__panel({ kind: 'copied', which: 'problem', ok: q.get('copy') !== 'fail' }), 150);
       const id = args.msg?.id ?? '';
       if (id.startsWith('size:')) { s.size = id.slice(5); setTimeout(() => window.__panel({ kind: 'state', state: s }), 120); }
@@ -1357,7 +1354,7 @@
       const gone = [[/^skill:forget:(.+)$/, 'skills', (x, v) => x.slug === v], [/^mcp:remove:(.+)$/, 'connections', (x, v) => x.name === v], [/^job:remove:(.+)$/, 'jobs', (x, v) => x.id === v],
         [/^forget:(.+)$/, 'facts', (x, v) => x.id === v], [/^(?:done|drop):(.+)$/, 'commitments', (x, v) => x.id === v]].find(([re]) => re.test(id));
       if (gone) { const v = id.match(gone[0])[1]; s[gone[1]] = s[gone[1]].filter((x) => !gone[2](x, v)); setTimeout(() => window.__panel({ kind: 'state', state: s }), Number(q.get('lag') ?? 120)); }
-      if (id.startsWith('look:')) { s.look = id.slice(5); s.name = s.looks.find(([v]) => v === s.look)?.[1] ?? s.name; setTimeout(() => window.__panel({ kind: 'state', state: s }), 120); }
+      if (id.startsWith('personality:')) { s.personality = id.slice(12); setTimeout(() => window.__panel({ kind: 'state', state: s }), 120); }
       return null;
     };
   }

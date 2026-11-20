@@ -30,7 +30,8 @@
 
   const G = (R.ghost = {
     color: 'ivory',
-    setPersonality(p) { G.color = PERSONA_GHOST[p] ?? 'ivory'; },
+    colorOf: (p) => PERSONA_GHOST[p] ?? 'ivory',
+    setPersonality(p) { G.color = G.colorOf(p); },
     dark: () => darkMQ.matches,
     ready: () => !!man,
     // The frame of a state at time t (seconds), by its own per-frame times; frame 0 under reduced motion.
@@ -42,10 +43,10 @@
       return 0;
     },
     // Draws the ghost centred on (x, y) at a whole-number scale. show: 0..1 for a Bayer dither in/out (1 = all of it).
-    draw(ctx, x, y, { state = 'idle', t = 0, scale = 2, reduced = false, show = 1, dpr = 1, dark = G.dark() } = {}) {
+    draw(ctx, x, y, { state = 'idle', t = 0, scale = 2, reduced = false, show = 1, dpr = 1, dark = G.dark(), color = G.color } = {}) {
       const s = states.get(state) ?? states.get('idle');
       if (!s) return null;
-      const im = sheet(`clanky-${G.color}-${dark ? 'dark' : 'light'}.png`);
+      const im = sheet(`clanky-${color}-${dark ? 'dark' : 'light'}.png`);
       if (!im) return null;
       const c = man.cell, f = G.frame(state, t, reduced);
       const size = c * scale, X = Math.round((x - size / 2) * dpr) / dpr, Y = Math.round((y - size / 2) * dpr) / dpr;
@@ -53,13 +54,13 @@
       return { x: X, y: Y, w: size, h: size, key: s.row * 8 + f };
     },
     // The cursor-size ghost with its top-left on the pointer's tip.
-    cursor(ctx, x, y, { t = 0, reduced = false, show = 1, dpr = 1 } = {}) {
+    cursor(ctx, x, y, { t = 0, reduced = false, show = 1, dpr = 1, color = G.color } = {}) {
       if (!man) return null;
       const im = sheet(G.dark() ? man.cursor.sheet_dark : man.cursor.sheet_light);
       if (!im) return null;
       const c = man.cursor.cell, sc = man.cursor.scale, f = reduced ? 0 : Math.floor((t * 1000) / man.cursor.ms) % man.cursor.frames;
       const X = Math.round(x * dpr) / dpr, Y = Math.round(y * dpr) / dpr;
-      blit(ctx, im, f * c, CURSOR_ROW[G.color] * c, c, c, X, Y, c * sc, show);
+      blit(ctx, im, f * c, CURSOR_ROW[color] * c, c, c, X, Y, c * sc, show);
       return { x: X, y: Y, w: c * sc, h: c * sc, key: 200 + f };
     },
   });

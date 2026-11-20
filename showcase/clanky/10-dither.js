@@ -107,7 +107,8 @@
       const AX = 4, AY = 7;
 
       // ---------- the ghost ----------
-      let gpos = null, gstate = 'idle';
+      // gcolor: this one's own ghost colour (a picker tile), else the personality's (ghost.js).
+      let gpos = null, gstate = 'idle', gcolor;
       const GSCALE = () => (form === 'small' ? 1 : 2);
       // Its box on screen: centred on the body point, or at cursor size with its top-left on the pointer's tip.
       const ghostBox = (bx, by) => {
@@ -132,12 +133,12 @@
         const g = GH();
         if (!g) return 0;
         const f = g.frame(gstate, t, env.reduced);
-        return (gstate.length * 131 + gstate.charCodeAt(0) * 7 + f * 1009 + (g.dark() ? 7919 : 0) + g.color.charCodeAt(0) * 104729) | 0;
+        return (gstate.length * 131 + gstate.charCodeAt(0) * 7 + f * 1009 + (g.dark() ? 7919 : 0) + (gcolor ?? g.color).charCodeAt(0) * 104729) | 0;
       };
       const drawGhost = (ctx, env) => {
         const g = GH();
         if (!g || !gpos || pres.state === 'hidden') return;
-        const o2 = { state: gstate, t, reduced: !!env.reduced, show: ghostShow(), dpr: env.dpr || 1 };
+        const o2 = { state: gstate, t, reduced: !!env.reduced, show: ghostShow(), dpr: env.dpr || 1, color: gcolor ?? g.color };
         if (form === 'cursor') g.cursor(ctx, gpos.x - AX * P, gpos.y - AY * P, o2);
         else g.draw(ctx, gpos.x, gpos.y, { ...o2, scale: GSCALE() });
       };
@@ -411,7 +412,8 @@
         ghost: () => !!plug?.ghost?.(),
         morph,
         get look() { return look; },
-        setLook() {},
+        // A fixed ghost colour for this one, by personality id (null: follow the personality, ghost.js).
+        setGhost(p) { gcolor = p ? Clanky.ghost?.colorOf(p) : undefined; },
         resize(env) {
           lastEnv = env;
           const S = Clanky.unit(env);
