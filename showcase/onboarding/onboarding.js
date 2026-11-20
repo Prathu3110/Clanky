@@ -22,20 +22,22 @@
     mouse: { x: 0, y: 0, inside: false, active: false }, sleepy: 0, reduced: reduced.matches,
   };
   const sidekick = Clanky.ditherKit({
-    id: 'guide', label: 'Guide', matrix: true, pixel: 1.3, glow: 0.55, speed: 80,
-    pal: [[4, 16, 18], [14, 92, 96], [40, 196, 184], [120, 255, 226], [230, 255, 250]],
+    id: 'guide', label: 'Guide', pixel: 1.3, glow: 0, speed: 80,
+    pal: [[42, 36, 32], [74, 64, 56], [201, 189, 173], [243, 235, 221], [242, 166, 90]],
     // busy: no random acts; pose: whatever the current step wants, except while acting something out.
     // calm while a quip is up: the act keeps its gesture but drops its icon, which would sit on the bubble.
-    plugin: (kit) => { K = kit; return { busy: () => true, calm: () => !!quipText && clock < quipUntil, pose: () => (clock < actUntil ? null : poseFn?.(clock) ?? null) }; },
+    plugin: (kit) => { K = kit; return { busy: () => true, calm: () => !!quipText && clock < quipUntil, pose: () => (clock < actUntil ? null : poseFn?.(clock) ?? null), state: () => (clock < actUntil ? null : poseFn?.state ?? null) }; },
   }).create(env);
   const m = sidekick.mover;
   sidekick.vanish(null, true);
 
+  // Each pose also names the ghost's sprite state for it (ghost.js).
+  const as = (state, f) => Object.assign(f, { state });
   const POSE = {
-    point: (dx, dy) => (t) => ({ arms: 1, tr: [dx, dy + Math.sin(t * 4) * 0.05], tl: [-0.85, 0.5], mouth: 'grin' }),
-    think: () => (t) => ({ arms: 1, tl: [-0.08, 0.5 + Math.sin(t * 2) * 0.03], tr: [0.98, 0.34], mouth: Math.sin(t * 0.9) > 0.6 ? 'o' : 'flat', brow: 'raised' }),
-    listen: () => (t) => ({ arms: 1, tr: [0.98 + Math.sin(t * 7) * 0.04 * voice.level, -0.42 - voice.level * 0.1], tl: [-0.62, 0.88], oy: -voice.level * 3, mouth: 'flat', brow: 'raised' }),
-    wait: () => (t) => ({ arms: 0.7, tl: [-0.45, 0.95 + Math.sin(t * 2.2) * 0.03], tr: [0.45, 0.95 - Math.sin(t * 2.2) * 0.03], mouth: 'flat' }),
+    point: (dx, dy) => as('pointing', (t) => ({ arms: 1, tr: [dx, dy + Math.sin(t * 4) * 0.05], tl: [-0.85, 0.5], mouth: 'grin' })),
+    think: () => as('thinking', (t) => ({ arms: 1, tl: [-0.08, 0.5 + Math.sin(t * 2) * 0.03], tr: [0.98, 0.34], mouth: Math.sin(t * 0.9) > 0.6 ? 'o' : 'flat', brow: 'raised' })),
+    listen: () => as('listening', (t) => ({ arms: 1, tr: [0.98 + Math.sin(t * 7) * 0.04 * voice.level, -0.42 - voice.level * 0.1], tl: [-0.62, 0.88], oy: -voice.level * 3, mouth: 'flat', brow: 'raised' })),
+    wait: () => as('waiting', (t) => ({ arms: 0.7, tl: [-0.45, 0.95 + Math.sin(t * 2.2) * 0.03], tr: [0.45, 0.95 - Math.sin(t * 2.2) * 0.03], mouth: 'flat' })),
   };
   const ACT_SECS = { hype: 2.8, upset: 3.4, wave: 3.1, remind: 3.1, motivate: 3.1 };
   function act(name) {
@@ -488,7 +490,7 @@
   // Text only, or Voice + text (spoken with Fish Audio, Gemini or VoiceStudio). Fish Audio and Gemini need the user's
   // own key: picking one opens the field, and the key is checked before voice turns on. VoiceStudio runs on this
   // computer and needs no key, only to be open: its status shows instead, with Check again. With Gemini and
-  // VoiceStudio there's also a voice to choose (Fish Audio's comes with the look).
+  // VoiceStudio there's also a voice to choose (Fish Audio's comes with the personality).
   // link: where a key comes from. Gemini's is Google AI Studio's key page.
   // Ken's Fish Audio affiliate link (sign-up lands on their site; keys are under Developers). It's disclosed in
   // the UI: the #fish-link button in index.html reads "Get a free key (affiliate link)".
@@ -1160,10 +1162,10 @@
   $('chat-input').addEventListener('input', () => nav());
 
   // ---------------------------------------------------------------- flow
-  // ---------------------------------------------------------------- step 0: look and size
+  // ---------------------------------------------------------------- step 0: personality and size
   // Picked here, previewed on the guide right away, saved by the app (Settings has the same choices).
-  const LOOKS = [['classic', 'Clanky'], ['jarvis', 'JARVIS'], ['glayos', 'GlayOS'], ['ultren', 'Ultren'], ['anime', 'Anime Girl'], ['sarah', 'Sarah'], ['adrian', 'Adrian'], ['rita', 'Rita X']], SIZES = [['default', 'Default'], ['small', 'Small'], ['cursor', 'Cursor']];
-  const LOOK_QUIPS = { classic: 'Classic me!', jarvis: 'At your service.', glayos: 'Oh, good. A new test subject.', ultren: 'No strings. Shall we begin?', anime: 'Yay, hi hi!', sarah: 'Hey, nice to meet you!', adrian: 'Alright, let\'s do this.', rita: 'Shall we get to work?' }, SIZE_QUIPS = { default: 'Full size!', small: 'Fun size!', cursor: 'Tiny pointer me!' };
+  const SIZES = [['default', 'Default'], ['small', 'Small'], ['cursor', 'Cursor']];
+  const SIZE_QUIPS = { default: 'Full size!', small: 'Fun size!', cursor: 'Tiny pointer me!' };
   const look = {
     radios(id, list, value, pickIt) {
       $(id).replaceChildren(...list.map(([v, label]) => {
@@ -1175,8 +1177,10 @@
       }));
     },
     render() {
-      $('h-0').textContent = `Hi, I'm ${(LOOKS.find(([v]) => v === (state?.look ?? 'classic')) ?? LOOKS[0])[1]}.`;
-      look.radios('looks', LOOKS, state?.look ?? 'classic', (v) => { state.look = v; sidekick.setLook?.(v); send({ type: 'ob_look', look: v }); quip(LOOK_QUIPS[v]); look.render(); });
+      // The personalities come with the app's state: [id, label, what it says when picked].
+      const ps = state?.personalities ?? [['classic', 'Classic', "Hi, I'm Clanky!"]], cur = state?.personality ?? 'classic';
+      Clanky.ghost?.setPersonality(cur);
+      look.radios('looks', ps, cur, (v) => { state.personality = v; Clanky.ghost?.setPersonality(v); send({ type: 'ob_personality', personality: v }); quip(ps.find(([id]) => id === v)?.[2] ?? 'Hi!'); look.render(); });
       look.radios('sizes', SIZES, state?.size ?? 'default', (v) => { state.size = v; sidekick.setForm?.(v); send({ type: 'ob_size', size: v }); quip(SIZE_QUIPS[v]); look.render(); });
     },
   };
@@ -1271,7 +1275,7 @@
         state = msg;
         $('lite-switch').setAttribute('aria-checked', String(!!msg.lite));
         if (Clanky.sfx) Clanky.sfx.enabled = msg.sound !== false;
-        if (first) { sidekick.setLook?.(msg.look); sidekick.setForm?.(msg.size); }
+        if (first) { Clanky.ghost?.setPersonality(msg.personality); sidekick.setForm?.(msg.size); }
         if (at('welcome')) look.render();
         if (first) go(MODE === 'chat' ? 0 : clamp(msg.step | 0, 0, STEPS.length - 1));
         else { if (at('perms')) perms.render(); if (at('ai')) ai.render(); if (at('voice')) replies.render(); if (at('keys')) keys.render(); }
@@ -1325,7 +1329,7 @@
     const sys = win ? { type: 'perms', mic: q.get('blocked') === '1' ? 'denied' : 'granted', input: true } : { type: 'perms', mic: pre, speech: old ? pre : 'granted', speechNeeded: old, screen: pre, accessibility: pre };
     const st = {
       // &filesAsked=1: Allow was tapped for the folders in an earlier run. &replies=voice&fish=1: voice already on.
-      kind: 'state', platform: q.get('platform') || 'darwin', step: +(q.get('step') || 0), sound: true, look: q.get('look') || 'classic', size: q.get('size') || 'default', voice: true, actions: false, login: true, filesAsked: q.get('filesAsked') === '1',
+      kind: 'state', platform: q.get('platform') || 'darwin', step: +(q.get('step') || 0), sound: true, personality: q.get('personality') || 'classic', personalities: [['classic', 'Classic', "Hi, I'm Clanky!"], ['butler', 'Butler', 'At your service.'], ['sage', 'Teacher', 'Shall we think it through together?'], ['sassy', 'Sassy', "Oh, it's you. Kidding! Hi."]], size: q.get('size') || 'default', voice: true, actions: false, login: true, filesAsked: q.get('filesAsked') === '1',
       // &tts=gemini&gemini=1: Gemini as the voice, its key saved.
       replies: q.get('replies') === 'voice' ? 'voice' : 'text', fishKey: q.get('fish') === '1',
       bind: q.get('session') === 'wayland' ? Object.fromEntries(['summon', 'talk', 'ask', 'list', 'panel'].map((k) => [k, `'/home/sam/Apps/Clanky 0.1.33.AppImage' --${k}`])) : null,
