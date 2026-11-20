@@ -269,6 +269,7 @@
   // reacting to what's going on) and one per personality on the Appearance page. One loop draws them all,
   // only while the panel is up and each canvas is on screen.
   const PAL = [[42, 36, 32], [74, 64, 56], [201, 189, 173], [243, 235, 221], [242, 166, 90]];
+  const personaLabel = () => state.personalities?.find((p) => p[0] === state.personality)?.[1] ?? 'Clanky';
   const POSE_STATE = { think: 'thinking', concerned: 'error' };
   const live = new Set();
   let pointer = null; // the cursor in page px, for their eyes
@@ -754,7 +755,7 @@
         el('span', {}, 'VoiceStudio', el('small', { className: vs.ok || vs.checking ? '' : 'bad', textContent: status, role: vs.ok || vs.checking ? null : 'alert' })),
         el('span', { className: 'row-btns' }, link('Check again', () => act('voicestudio_check'), { k: 'voicestudio_check', aria: 'Check VoiceStudio again' }))),
       vs.ok ? el('div', { className: 'reveal', 'data-anim': 'studio-voice' },
-        el('p', { className: 'sub', textContent: `Voice for ${state.name}` }),
+        el('p', { className: 'sub', textContent: `Voice for ${personaLabel()} (each personality keeps its own)` }),
         el('span', { className: 'px field select' },
           el('select', { 'aria-label': 'VoiceStudio voice', 'data-k': 'studiovoice', on: { change: (e) => act(`studiovoice:${e.target.value}`) } },
             el('option', { value: 'default', textContent: 'Engine default', selected: !vs.voice || !voices.some((x) => x.id === vs.voice) }),
@@ -797,14 +798,14 @@
         picks('Voice provider', Object.entries(TTS_NAMES), tts, (x) => {
           if (x !== 'voicestudio' && !state[`${x}Key`]) { ui.key = x; note(`Add a ${TTS_NAMES[x]} key to hear me talk.`); } // its key field opens with it
           act(`tts:${x}`);
-        }, 'tts', { fish: 'A voice for each personality, acted out with feeling. Billed to your Fish Audio account.', gemini: "Google's voices: pick one of 30. Billed to your Google AI Studio account.", voicestudio: 'The free VoiceStudio app on this computer, in the engine and voices you set up there. Nothing leaves your computer.' }),
+        }, 'tts', { fish: 'A voice for each personality, acted out with feeling. Billed to your Fish Audio account.', gemini: "Google's voices: one of 30 for each personality. The free allowance runs out after a few replies; with billing on, it costs a fraction of a cent per reply.", voicestudio: 'The free VoiceStudio app on this computer, in the engine and voices you set up there. Nothing leaves your computer.' }),
         local ? el('div', { className: 'reveal', 'data-anim': 'studio' }, studioRows()) : null,
         local ? el('div', { className: 'reveal', 'data-anim': 'studio-speak' },
           el('p', { className: 'sub', textContent: 'How much it speaks' }),
           picks('How much it speaks', [['short', 'Short'], ['medium', 'Medium'], ['full', 'Everything']], state.voice?.studioSpeak ?? 'short', (x) => act(`studiospeak_${x}`), 'studiospeak'),
           el('p', { className: 'why wrap', textContent: 'VoiceStudio is slow. The full answer always shows as text.' })) : null,
         tts === 'gemini' && hasKey && state.geminiVoices?.length ? el('div', { className: 'reveal', 'data-anim': 'gemini-voice' },
-          el('p', { className: 'sub', textContent: `Voice for ${state.name}` }),
+          el('p', { className: 'sub', textContent: `Voice for ${personaLabel()} (each personality keeps its own)` }),
           el('span', { className: 'px field select' },
             el('select', { 'aria-label': 'Gemini voice', 'data-k': 'geminivoice', on: { change: (e) => act(`geminivoice:${e.target.value}`) } },
               state.geminiVoices.map((g) => el('option', { value: g.id, textContent: `${g.id} · ${g.style}`, selected: g.id === state.geminiVoice })))),

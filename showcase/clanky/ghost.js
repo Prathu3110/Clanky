@@ -11,6 +11,7 @@
   const ALPHA = 0.9;
   const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)');
+  const ON_SCREEN = /\/desktop\.html$/.test(location.pathname);
 
   let man = null;
   const states = new Map();
@@ -34,7 +35,9 @@
     // The bubble's accent strip: the ghost's body colour; tangerine for Classic (its ivory would vanish on oat).
     accent: () => ({ ivory: '#F2A65A', cobalt: '#3468CE', green: '#30945F', pink: '#FF4F9A' })[G.color],
     setPersonality(p) { G.color = G.colorOf(p); },
-    dark: () => darkMQ.matches,
+    // The dark sheets carry a dithered glow for a dark backdrop. On the overlay the backdrop is whatever app is
+    // underneath, where that glow reads as blur, so the overlay always uses the crisp light sheets (ink outline).
+    dark: () => !ON_SCREEN && darkMQ.matches,
     ready: () => !!man,
     // The frame of a state at time t (seconds), by its own per-frame times; frame 0 under reduced motion.
     frame(id, t, reduced) {
