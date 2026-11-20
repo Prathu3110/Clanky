@@ -29,8 +29,8 @@ import {
   touchFacts, forDisk, forProvider, loadLatestSession, newSession, openCommitments, pruneSessions, readJson, saveSession, takeDueReminders, updateCommitment, writeJson,
 } from './store.mjs';
 import { feedbackOf, foldInput, rateTarget, foldPrompt, lessonInput, lessonPrompt, memoryInput, memoryPrompt, oneShot, parseBrain, parseLesson, parseSkill, shouldLearn, skillInput, skillPrompt, soundsWrong, transcript } from './brain.mjs';
-import { lessonsFor, lessonsLine } from './graph.mjs';
-import { createLaya, pickKinds, trace as layaTrace } from './laya.mjs';
+import { lessonsFor, lessonsLine, lessonSlug, proposeLesson } from './graph.mjs';
+import { createLaya, lastTurnTools, pickKinds, trace as layaTrace } from './laya.mjs';
 import { briefNote } from './brief.mjs';
 import { CHECK_MS, DEFAULT_DISTRACTIONS, check as focusCheck, parseDistractions, startBlock } from './focus.mjs';
 import { saveCardImage } from './cardimage.mjs';
@@ -796,9 +796,9 @@ The <live-state> block at the top of the user's newest message is the current st
 let lastFactIds = [];
 let frontNow = ''; // set just before each request (whereNow)
 let lessonsNow = []; // Clanky: graph lessons for the front app, set just before each request (graph.mjs)
-// Clanky: Laya in shadow mode (laya.mjs). It decides beside jobKinds(); only the trace uses its answer for now.
+// Clanky: Laya (laya.mjs) decides beside jobKinds() and, when sure, adds kinds the words alone miss (follow-ups).
 const laya = createLaya();
-let layaNow = null, layaApp = null, turnTools = [], recentTools = [];
+let layaNow = null, layaApp = null, turnTools = [], lastTurn = null; // lastTurn: { at, tools } of the previous request
 const crewLine = () => { const t = crewText(crewNow(), (sp) => modelName(sp.model), config.delegate); return t ? `${t}\n` : ''; };
 const livePrompt = (context = '') => {
   const facts = pickFacts(context, 40), total = listFacts().length;
@@ -1219,7 +1219,7 @@ async function skillPass(p, why) {
 // "Good" or "Wrong" on the last request that used tools (the capsule's buttons, or said or typed). Good keeps a
 // how-to from it with a lower bar; Wrong runs the lesson pass (brain.mjs), which may keep a fact or fix a skill.
 const RATE_MS = 30 * 60_000;
-let lastRequest = null; // { messages, used, ok, bad, saved, at, rated }
+let lastRequest = null; // { messages, used, ok, bad, saved, at, rated, app }
 const learningOn = () => !config.lite && !!config.model && config.learnSkills !== false;
 const rateable = () => (lastRequest && Date.now() - lastRequest.at < RATE_MS ? lastRequest : null);
 function onFeedback(kind, text = '', via = 'said') {
@@ -1262,7 +1262,14 @@ async function lessonPass(r, correction) {
       catch (e) { logLine('lesson_skill_refused', { error: String(e?.message ?? e).slice(0, 300) }); }
     }
     if (out.fact || skill) panel();
-    logLine('lesson', { model, ms: Date.now() - t0, fact: !!out.fact, replaced: !!out.fact?.replaces, skill });
+    // Clanky: an app rule goes to the memory graph's `proposed` branch; it's used once the owner merges it
+    // (node omnigraph/review.mjs).
+    let proposed = null;
+    if (out.lesson && r.app) {
+      try { proposed = lessonSlug(out.lesson.text); await proposeLesson({ slug: proposed, text: out.lesson.text, bundle: r.app }, { timeoutMs: 3000 }); activity.noted(`Lesson to review: ${out.lesson.text}`); }
+      catch (e) { logLine('lesson_graph_failed', { error: String(e?.message ?? e).slice(0, 300) }); proposed = null; }
+    }
+    logLine('lesson', { model, ms: Date.now() - t0, fact: !!out.fact, replaced: !!out.fact?.replaces, skill, proposed });
   } catch (e) {
     logLine('lesson_failed', { ms: Date.now() - t0, error: String(e?.message ?? e).slice(0, 300) });
   }
@@ -1427,7 +1434,7 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
   // Clanky: Laya decides before routing (laya.mjs). Capped so a slow front-app lookup never holds the request up.
   turnTools = []; layaNow = null; layaApp = null;
   if (turnWords) {
-    const asked = frontData().catch(() => null).then((f) => { layaApp = f?.bundle ?? null; return laya.ask({ text: turnWords, app: layaApp, recentTools }); });
+    const asked = frontData().catch(() => null).then((f) => { layaApp = f?.bundle ?? null; return laya.ask({ text: turnWords, app: layaApp, recentTools: lastTurnTools(lastTurn) }); });
     layaNow = await Promise.race([asked, new Promise((r) => setTimeout(() => r(null), 150))]);
   }
   const handoff = routeForTurn(turnWords || '(system)');
@@ -1601,7 +1608,7 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
     logLine('request_done', { turn, ms: Date.now() - use.t, calls: use.calls, tools: use.tools, in: use.in, cacheRead: use.cacheRead, cacheWrite: use.cacheWrite, out: use.out });
     if (turnWords) {
       layaTrace({ t: use.t, text: turnWords, app: layaApp, regex: jobKinds(turnWords), laya: layaNow, used: pickKinds(jobKinds(turnWords), layaNow), tools: turnTools, truth: [...new Set(turnTools.map(kindOfTool).filter(Boolean))], model: config.model, ms: Date.now() - use.t, in: use.in, cacheRead: use.cacheRead, cacheWrite: use.cacheWrite, out: use.out });
-      recentTools = [...recentTools, ...turnTools].slice(-8);
+      lastTurn = { at: Date.now(), tools: turnTools };
     }
   } catch (err) {
     lastFailed = true;
@@ -1639,7 +1646,7 @@ async function prompt(text, image = null, note = '', byVoice = false, news = nul
       const from = session.messages.findLastIndex((m) => m.role === 'user');
       if (from >= 0) {
         const messages = session.messages.slice(from), used = [...skillsUsed];
-        if (rated) req = { messages, used, ok: learn.ok, bad: learn.bad, saved: learn.saved, at: Date.now(), rated: null };
+        if (rated) req = { messages, used, ok: learn.ok, bad: learn.bad, saved: learn.saved, at: Date.now(), rated: null, app: layaApp };
         if (learnAfter) queueLearn(messages, used);
       }
     }

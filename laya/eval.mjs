@@ -12,7 +12,7 @@ const firstOk = (a = [], b = []) => (a[0] ?? null) === (b[0] ?? null);
 
 export function grade(rows, threshold = 0.6) {
   const n = rows.length, answered = rows.filter((r) => r.laya);
-  const used = (r) => (r.laya && r.laya.confidence >= threshold ? r.laya.kinds : r.regex); // what Laya-on would route by
+  const used = (r) => (r.laya && r.laya.confidence >= threshold ? [...new Set([...r.regex, ...r.laya.kinds])] : r.regex); // as pickKinds routes
   const pct = (k) => (n ? `${Math.round((100 * k) / n)}%` : '-');
   const ms = answered.map((r) => r.laya.ms).sort((a, b) => a - b);
   return {

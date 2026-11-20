@@ -2,6 +2,7 @@
 // endpoint as `act-agent`, which may read every branch but write only to unprotected ones, so new lessons land on
 // `proposed` and reach `main` only when the owner merges them. Reads use `main`: confirmed lessons only.
 // Everything fails soft: no token file, no server or a slow answer means no lessons, never a failed request.
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { DIR } from './store.mjs';
@@ -43,6 +44,9 @@ export const lessonsLine = (lessons) => (lessons.length
   : '');
 
 /** Proposes a lesson for an app on the `proposed` branch (created on first use). The owner reviews and merges it. */
+/** A stable key for a lesson's text: its first words, plus a short hash so two lessons never collide. */
+export const lessonSlug = (text) => `${String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)}-${createHash('sha256').update(String(text)).digest('hex').slice(0, 6)}`;
+
 export async function proposeLesson({ slug, kind = 'lesson', text, bundle, appName }, opts) {
   const br = { branch: 'proposed' };
   await callTool('branches_create', { name: 'proposed', from: 'main' }, opts).catch(() => {}); // already there is fine
