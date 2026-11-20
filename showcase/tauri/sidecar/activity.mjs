@@ -59,6 +59,8 @@ export function createActivity({ max = 12, now = () => Date.now() } = {}) {
     handoff(task) { add('did', `Handed off: ${short(task, 60)}`); },
     // A skill the learning pass kept, so nothing is learned silently.
     learned(name, updated = false) { add('did', `${updated ? 'Improved' : 'Learned'}: ${short(name, 60)}`); },
+    // A fact kept from their feedback ("that's wrong, use Firefox"), shown so they can undo it on the Memory page.
+    noted(fact) { add('did', `Noted: ${short(fact, 60)}`); },
     // Every tool is tracked, even ones with no line, so stopped() can say which never finished.
     start(id, name, args) { const d = describe(name, args); running.set(id, d); return d?.[0] ?? null; },
     end(id, isError) { const d = running.get(id); running.delete(id); if (d) add(isError ? 'bad' : 'did', isError ? `Couldn't finish: ${d[1].charAt(0).toLowerCase()}${d[1].slice(1)}` : d[1]); },

@@ -253,6 +253,9 @@
     quitB.setAttribute('aria-pressed', 'true'); quitB.setAttribute('aria-label', 'Confirm: quit Clanky');
     quitTimer = setTimeout(unarmQuit, 4000);
   });
+  const closeB = $('head-close');
+  closeB.innerHTML = pix('x');
+  closeB.addEventListener('click', hide);
   function mark(page, why) {
     const b = $(`nav-${page}`);
     b.classList.toggle('flag', !!why);
@@ -761,6 +764,22 @@
     ];
   }
   const TTS_NAMES = { fish: 'Fish Audio', gemini: 'Gemini', voicestudio: 'VoiceStudio' };
+  // How loud I am: my voice and my sounds together (#136). Moving it shows the level; letting go saves it.
+  function volumeRow() {
+    const said = el('p', { className: 'why', 'aria-hidden': 'true' });
+    const show = (n) => {
+      const t = n === 0 ? 'Muted' : `${n}%`;
+      range.style.setProperty('--p', n / 100);
+      range.setAttribute('aria-valuetext', t);
+      said.textContent = t;
+    };
+    const range = el('input', {
+      type: 'range', className: 'effort-range', min: 0, max: 100, step: 5, value: state.volume ?? 100, 'data-k': 'volume', 'aria-label': 'Volume',
+      on: { input: (e) => show(Number(e.target.value)), change: (e) => act(`volume:${e.target.value}`) },
+    });
+    show(Number(range.value));
+    return el('div', { className: 'effort' }, el('p', { className: 'sub', textContent: 'Volume' }), range, said);
+  }
   function speakingPage() {
     // The service that speaks, each with its own key: Fish Audio's voice is the look's and it has models to pick
     // from; Gemini has a list of voices and two models; VoiceStudio runs on this computer and needs no key.
@@ -773,6 +792,7 @@
           if (x === 'voice' && !hasKey) { ui.key = tts; render(`key-${tts}`); note(`Add a ${T} key to hear me talk.`); return; }
           act(`replies:${x}`);
         }, 'replies', { text: 'I answer in writing only.', voice: `I say my answers out loud too, in the voice below${hasKey ? '' : `. Needs a ${T} key`}.` }),
+        volumeRow(),
         el('p', { className: 'sub', textContent: 'Voice provider' }),
         picks('Voice provider', Object.entries(TTS_NAMES), tts, (x) => {
           if (x !== 'voicestudio' && !state[`${x}Key`]) { ui.key = x; note(`Add a ${TTS_NAMES[x]} key to hear me talk.`); } // its key field opens with it

@@ -152,6 +152,9 @@ const READ_EVERY: f64 = 0.8;
 // Parakeet makes up words ("Thank you.") from silence, so a take is only read once the mic heard a voice:
 // about -49 dBFS, above room noise and below quiet speech.
 const SPEECH_LEVEL: f64 = 0.15;
+// A take the app opened itself (auto-listen) counts as speech only once a voice stays up this long without a break: a
+// click, tap or bump is shorter, and Parakeet heard those as "Yeah", which was answered and listened after again (#131).
+const VOICE_ONSET: f64 = 0.15;
 // Hands-free, a take also ends once this much more sound came in without new words: steady noise or a voice in the
 // background can keep the level up, but it doesn't keep adding to what was said (#64).
 const STALE_ENDS: f64 = 4.0;
@@ -216,6 +219,11 @@ struct Voice {
     prev_chord: bool,
     report_empty: bool,
     spoke: bool,
+    /// Opened by the app, not by a key (auto-listen): only a sustained voice starts reading (VOICE_ONSET).
+    needs_voice: bool,
+    /// How long the voice has been up without a break, and when the last level reading came in.
+    voice_run: f64,
+    last_level: f64,
     best: String,
     // Each session gets a new take number; results for older takes are ignored.
     take: u64,
@@ -269,6 +277,9 @@ impl Voice {
             prev_chord: false,
             report_empty: false,
             spoke: false,
+            needs_voice: false,
+            voice_run: 0.0,
+            last_level: 0.0,
             best: String::new(),
             take: 0,
             buf: Arc::new(Mutex::new(Vec::new())),
@@ -432,6 +443,9 @@ impl Voice {
         self.chord_at = now;
         self.best.clear();
         self.spoke = false;
+        self.needs_voice = false;
+        self.voice_run = 0.0;
+        self.last_level = now;
         self.take += 1;
         self.reading = false;
         self.read_len = 0;
@@ -563,7 +577,15 @@ impl Voice {
 
     fn on_level(&mut self, v: f64) {
         let now = self.now();
-        if self.floor.is_voice(v, now) {
+        self.level_reading(v, now);
+    }
+
+    fn level_reading(&mut self, v: f64, now: f64) {
+        let dt = (now - self.last_level).clamp(0.0, 0.1);
+        self.last_level = now;
+        let voice = self.floor.is_voice(v, now);
+        self.voice_run = if voice { self.voice_run + dt } else { 0.0 };
+        if voice {
             self.voice_at = now;
             if self.phase == Phase::Wake && self.utter.is_none() {
                 let len = self.buf.lock().unwrap().len();
@@ -572,7 +594,8 @@ impl Voice {
                 self.utter_read = false;
             }
         }
-        if v > SPEECH_LEVEL && !matches!(self.phase, Phase::Idle | Phase::Wake) {
+        let speech = if self.needs_voice { self.voice_run >= VOICE_ONSET } else { v > SPEECH_LEVEL };
+        if speech && !matches!(self.phase, Phase::Idle | Phase::Wake) {
             self.spoke = true;
         }
         if !matches!(self.phase, Phase::Holding | Phase::HandsFree) || now - self.level_at < 0.05 {
@@ -822,7 +845,10 @@ impl Voice {
         match ev {
             Ev::Cmd(msg) => match msg.get("cmd").and_then(Value::as_str) {
                 Some("cancel") => self.external_cancel(),
-                Some("listen") => self.listen_now(msg.get("wait").and_then(Value::as_f64)),
+                Some("listen") => {
+                    self.listen_now(msg.get("wait").and_then(Value::as_f64));
+                    self.needs_voice = true;
+                }
                 Some("toggle") => self.toggle(),
                 // The panel's mic picker: the list, and a pick (a name from it; none or "" is the default), used from the
                 // next time the mic opens.
@@ -1080,6 +1106,32 @@ mod tests {
         v.toggle();
         assert_eq!(v.phase, Phase::Idle);
         assert!(v.source.is_none());
+    }
+
+    #[test]
+    fn a_click_while_auto_listening_is_not_speech() {
+        // Regression (#131): one loud blip opened the take for reading, Parakeet made "Yeah" of it, and that was
+        // answered and listened after again, round and round.
+        let (mut v, _jobs, wav) = voice();
+        v.handle(Ev::Cmd(json!({ "cmd": "listen", "wait": 8 })));
+        assert_eq!(v.phase, Phase::HandsFree);
+        assert!(v.needs_voice, "the app opened this take, not a key");
+        let mut t = v.last_level;
+        let mut play = |v: &mut Voice, level: f64, n: usize| {
+            for _ in 0..n {
+                t += 0.01;
+                v.level_reading(level, t);
+            }
+        };
+        play(&mut v, 0.05, 30); // a quiet room
+        play(&mut v, 0.9, 5); // a 50 ms click
+        play(&mut v, 0.05, 30);
+        play(&mut v, 0.9, 5); // and another
+        play(&mut v, 0.05, 30);
+        assert!(!v.spoke, "clicks aren't speech, so nothing is read");
+        play(&mut v, 0.7, 25); // a word
+        assert!(v.spoke, "a voice that stays up is");
+        let _ = std::fs::remove_file(wav);
     }
 
     #[test]

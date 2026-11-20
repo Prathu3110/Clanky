@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { resolveToolSchema } from '@kenkaiiii/gg-ai';
 import { createTools, shellFor } from '../tools.mjs';
+import { LIMITS } from '../draw.mjs';
 
 const noop = async () => {};
 const { tools } = createTools({ allowActions: false, ui: () => {}, ask: async () => false, openUrl: noop, onCommitments: noop, showList: noop, fmtWhen: String, commitmentsText: () => '', userName: 'Test', focus: { start: () => 'ok', stop: () => 'ok' }, jobs: { changed: () => {}, run: async () => ({ id: 'a1' }) }, skills: { changed: () => {} } });
@@ -54,7 +55,7 @@ assert.ok(!/"(oneOf|anyOf|allOf)"/.test(drawSchema), 'draw is one flat object sc
   for (const k of ['flow', 'table', 'bars', 'map', 'math', 'geometry', 'quiz']) assert.ok(mark.kind.enum.includes(k), `${k} is a kind of mark`);
   assert.ok(mark.parts.items.properties.motion, 'a part can move');
   assert.ok(d.description.includes('\\frac{a}{b}, \\sqrt{x}') && d.description.includes('no \\begin, & or \\\\ line breaks'), 'the LaTeX in the description reaches the model with single backslashes');
-  assert.ok(d.description.includes('At most 4 cards show at once (one more closes the oldest)'), 'the model knows only a few cards stay up');
+  assert.ok(d.description.includes(`At most ${LIMITS.cardsShown} cards show at once (one more closes the oldest)`), 'the model knows only a few cards stay up');
   assert.ok(d.description.length < 9000, `the draw description stays a readable size (${d.description.length})`);
 }
 console.log('tool schema ok');
@@ -85,6 +86,8 @@ if (process.platform === 'darwin') {
   assert.match(actInApp, /youtube\.com\/results\?search_query=/);
   // ...but when the user asks for the page's own search box, it uses the box.
   assert.match(actInApp, /unless the user asks you to use the box: then fill it/);
+  // Regression: a card's Delete only shows on hover, and clicking the card opened its page instead.
+  assert.match(actInApp, /only show when the pointer is over something.*\{do:'hover', text, near\}/);
 }
 
 // Linux: apps are opened by name through their .desktop files.

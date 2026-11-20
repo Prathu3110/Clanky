@@ -474,7 +474,7 @@ dependencies = [
 
 [[package]]
 name = "clanky"
-version = "0.1.44"
+version = "0.1.46"
 dependencies = [
  "global-hotkey",
  "gtk",

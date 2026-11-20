@@ -82,3 +82,39 @@ console.log('brain tests: passed');
   assert.match(skillInput({ index: '- tidy: When tidying', used: [{ slug: 'tidy', steps: '1. Sort.' }], turns: 'Ken: tidy' }), /- tidy: When tidying[^]*followed in this request[^]*tidy:\n1\. Sort\.[^]*Ken: tidy/);
   console.log('skill pass tests: passed');
 }
+
+// Feedback: short praise or a correction rates the last answer; requests, declines and "stop" don't.
+{
+  const { feedbackOf, shouldLearn } = await import('../brain.mjs');
+  for (const t of ['good job', 'Perfect!', 'that worked, thanks', 'exactly', 'Nice one 👍', 'great work clanky', "that's it!", 'wow, perfect', 'well done, cheers']) assert.equal(feedbackOf(t), 'good', t);
+  for (const t of ["no, that's wrong", "that's wrong, use Chrome", 'it didn\'t work', 'wrong file', 'not what I asked for', 'undo that, wrong one']) assert.equal(feedbackOf(t), 'wrong', t);
+  for (const t of ['great, now do March', 'perfect, can you also email it to Sam?', 'thanks!', 'no thanks', "nope, that's all", 'stop', 'undo that', 'what is good to eat', 'open Safari', '', 'good job '.repeat(10)]) assert.equal(feedbackOf(t), null, t);
+  assert.ok(!shouldLearn({ okTools: 2 }), 'two tools: too short without praise');
+  assert.ok(shouldLearn({ okTools: 2, praised: true }), 'praised: two tools are enough');
+  assert.ok(!shouldLearn({ okTools: 1, praised: true }), 'one tool is still a one-off');
+  assert.ok(!shouldLearn({ okTools: 9, praised: true, on: false }), 'switched off stays off');
+  // Which request a rating goes to: the one that just used tools; none after their chat-only request (regression: a
+  // "that's wrong" there rated an older request and kept a lesson from it); a reminder in between changes nothing.
+  const { rateTarget } = await import('../brain.mjs');
+  const a = { id: 'a' }, b = { id: 'b' };
+  assert.equal(rateTarget(a, { req: b, rated: true, theirs: true }), b);
+  assert.equal(rateTarget(a, { rated: false, theirs: true }), null);
+  assert.equal(rateTarget(a, { rated: false, theirs: false }), a);
+  console.log('feedback tests: passed');
+}
+
+// The lesson pass: a fact, a fixed skill, nothing, and secrets rejected.
+{
+  const { lessonInput, lessonPrompt, parseLesson } = await import('../brain.mjs');
+  assert.deepEqual(parseLesson('{"fact": {"text": "Ken uses Firefox, not Chrome", "replaces": "f1"}, "skill": null}', { knownIds: ['f1'] }), { fact: { text: 'Ken uses Firefox, not Chrome', replaces: 'f1' } });
+  assert.deepEqual(parseLesson('```json\n{"fact": null, "skill": {"name": "Export Figma frames", "description": "When they want Figma frames as PNGs.", "steps": "1. Select the frames.\\n2. Export at 2x, not 1x."}}\n```').skill.name, 'Export Figma frames');
+  assert.deepEqual(parseLesson('{"fact": null, "skill": null}'), {}, 'nothing to keep');
+  assert.deepEqual(parseLesson('{"fact": {"text": "Ken\'s password is hunter2"}, "skill": {"name": "Pay", "description": "When paying the bill online.", "steps": "1. Enter card 4111 1111 1111 1111 and pay."}}'), {}, 'no secrets, no card numbers');
+  assert.deepEqual(parseLesson('{"fact": "Ken likes tea", "skill": {"name": "x"}}'), { fact: { text: 'Ken likes tea' } }, 'a plain string fact; a scrap skill dropped');
+  assert.throws(() => parseLesson('no'), /no JSON/);
+  assert.match(lessonPrompt('Ken'), /never secrets[^]*Never passwords[^]*when in doubt/i);
+  const input = lessonInput({ facts: [{ id: 'f1', text: 'Ken uses Chrome' }], index: '- tidy: When tidying', used: [{ slug: 'tidy', steps: '1. Sort.' }], turns: 'Ken: tidy', correction: "that's wrong, use Firefox" });
+  assert.match(input, /- f1: Ken uses Chrome[^]*- tidy: When tidying[^]*tidy:\n1\. Sort\.[^]*Ken: tidy[^]*use Firefox/);
+  assert.match(lessonInput({ turns: 'Ken: tidy' }), /without saying why/);
+  console.log('lesson pass tests: passed');
+}
