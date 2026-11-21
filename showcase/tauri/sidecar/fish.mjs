@@ -28,6 +28,28 @@ export const startRequest = (voice, rate = RATE) => ({
   prosody: { speed: 1, volume: 0, normalize_loudness: false },
 });
 
+// Picking a voice: Fish's API lists only voices the account made itself (liked ones aren't listed), so any other
+// voice is added by its link or id (fish.audio/m/<id>).
+/** The 32-character voice id in a fish.audio link or a bare id, or null. */
+export const fishVoiceId = (raw) => /(?:^|[^0-9a-f])([0-9a-f]{32})(?:$|[^0-9a-f])/i.exec(String(raw ?? '').trim())?.[1]?.toLowerCase() ?? null;
+/** { id, name } of one voice, or null if there's no such voice (or it can't be reached). Never throws. */
+export async function fishVoiceInfo(key, id, { fetchImpl = fetch, timeout = 6000 } = {}) {
+  try {
+    const r = await fetchImpl(`${FISH_API}/model/${id}`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(timeout) });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j?._id ? { id: j._id, name: String(j.title ?? j._id).slice(0, 80) } : null;
+  } catch { return null; }
+}
+/** The voices this account made: [{ id, name }]; [] on any failure. */
+export async function fishOwnVoices(key, { fetchImpl = fetch, timeout = 6000 } = {}) {
+  try {
+    const r = await fetchImpl(`${FISH_API}/model?self=true&page_size=100`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(timeout) });
+    if (!r.ok) return [];
+    return ((await r.json())?.items ?? []).filter((i) => i?._id).map((i) => ({ id: i._id, name: String(i.title ?? i._id).slice(0, 80) }));
+  } catch { return []; }
+}
+
 /** Is the key good, and is there credit for the production model? Never throws. */
 export async function fishAccount(key, { fetchImpl = fetch, timeout = 6000 } = {}) {
   try {

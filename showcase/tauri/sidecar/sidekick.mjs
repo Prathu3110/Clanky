@@ -51,7 +51,7 @@ import { JOB_KINDS, findModelByName, findModelMention, hybridOn, isChitchat, job
 import { becauseOf, createLimits, firstFree, isQuota, limitFrom, untilWords } from './limits.mjs';
 import { SLOTS, isSetting, resolveEffort } from './effort.mjs';
 import { pickNotch } from './notch.mjs';
-import { DEFAULT_VOICE, FISH_CHOICES } from './fish.mjs';
+import { DEFAULT_VOICE, FISH_CHOICES, fishOwnVoices, fishVoiceId, fishVoiceInfo } from './fish.mjs';
 import { GEMINI_CHOICES, GEMINI_DEFAULT_VOICE, GEMINI_MODEL, GEMINI_VOICES } from './gemini.mjs';
 import { createSecrets, retryLoad, runInput } from './secrets.mjs';
 import { showTrayIcon } from './wintray.mjs';
@@ -138,6 +138,7 @@ const DEFAULTS = {
   studioSpeak: 'short', // how much Kokoro says out loud: 'short', 'medium' or 'full'
   studioVoices: {}, // personality → its Kokoro voice (none: the personality's own default)
   fishModel: FISH_CHOICES[0].id, // Drama 3 (most expressive) or S2.1 Pro (natural pace, cheaper)
+  fishVoices: {}, // personality → { id, name } of the Fish voice picked for it (else its own)
   geminiVoices: {}, // personality → the Gemini voice it speaks in, where picked in the setup guide or the panel (else its default)
   geminiModel: GEMINI_MODEL, // Flash Lite (quick, cheaper) or Flash (studio quality)
 };
@@ -163,7 +164,7 @@ const PERSONALITIES = [
 ];
 const persona = () => PERSONALITIES.find(([id]) => id === config.personality) ?? PERSONALITIES[0];
 const styleNow = () => persona()[2];
-const fishVoice = () => persona()[3];
+const fishVoice = () => config.fishVoices?.[persona()[0]]?.id ?? persona()[3];
 // Its voice with Gemini and with Kokoro: the user's pick for this personality, else its own default.
 const geminiVoice = () => config.geminiVoices?.[persona()[0]] ?? persona()[4] ?? GEMINI_DEFAULT_VOICE;
 const studioVoice = () => config.studioVoices?.[persona()[0]] ?? persona()[6] ?? null;
@@ -1882,6 +1883,25 @@ const studioState = () => {
   return { ok: !!l.ok, reason: l.reason ?? null, message: l.message ?? null, engine: l.engineName ?? l.engine ?? null, voices: (l.voices ?? []).slice(0, 200).map((v) => ({ id: v.id, name: v.name })), voice: speech.localVoice };
 };
 
+// Fish: 'default' (the personality's own voice), or a voice link or id. Checked with Fish, which also gives its name.
+let fishOwn = null; // the account's own voices, once fetched: [{ id, name }]
+async function loadFishOwn() { const [key] = await voiceKey('fish'); fishOwn = key ? await fishOwnVoices(key) : []; menu(); }
+async function setFishVoice(raw) {
+  const p = persona()[0];
+  if (raw === 'default') { const { [p]: _, ...rest } = config.fishVoices ?? {}; config.fishVoices = rest; }
+  else {
+    const id = fishVoiceId(raw), [key] = await voiceKey('fish');
+    if (!id) return panelNote("That isn't a Fish voice link or id. Open the voice on fish.audio and copy its link.", true);
+    const info = key && (fishOwn?.find((v) => v.id === id) ?? await fishVoiceInfo(key, id));
+    if (!info) return panelNote("Fish Audio doesn't know that voice. Check the link, and that your key works.", true);
+    config.fishVoices = { ...config.fishVoices, [p]: info };
+  }
+  saveConfig();
+  if (tts().id === 'fish') speech.setVoice(fishVoice());
+  menu();
+  if (tts().id === 'fish' && VOICE_ON()) speakLine('This is how I sound.');
+}
+
 function setGeminiVoice(v) {
   if (!GEMINI_VOICES.some((x) => x.id === v) || v === geminiVoice()) return;
   config.geminiVoices = { ...config.geminiVoices, [persona()[0]]: v }; saveConfig(); // this personality's
@@ -2292,6 +2312,7 @@ function panelState() {
     size: sizeNow(), sizes: SIZES,
     replies: VOICE_ON() ? 'voice' : 'text', tts: tts().id, fishKey: hasVoiceKey('fish'), geminiKey: hasVoiceKey('gemini'),
     fishModel: config.fishModel, fishModels: FISH_CHOICES, fishFree: tts().id === 'fish' && speech.on && speech.model.endsWith('-free'),
+    fishVoice: config.fishVoices?.[persona()[0]] ?? null, fishOwn: fishOwn ?? [],
     geminiVoice: geminiVoice(), geminiVoices: GEMINI_VOICES, geminiShared: ttsKeys.gemini === 'shared',
     geminiModel: config.geminiModel, geminiModels: GEMINI_CHOICES,
     studio: tts().local ? studioState() : null,
@@ -2544,6 +2565,8 @@ async function onMenu(id, via) {
   else if (id === 'geminikey') voiceKeyLogin({ provider: 'gemini' });
   else if (id === 'geminikey_remove') removeVoiceKey('gemini');
   else if (id.startsWith('tts:')) setTts(id.slice(4));
+  else if (id.startsWith('fishvoice:')) await setFishVoice(id.slice(10));
+  else if (id === 'fishvoices_load') await loadFishOwn();
   else if (id.startsWith('geminivoice:')) setGeminiVoice(id.slice(12));
   else if (id.startsWith('studiovoice:')) setStudioVoice(id.slice(12));
   else if (id === 'voicestudio_check') { await speech.checkLocal(); menu(); if (onboarding) obState(); }

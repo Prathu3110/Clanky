@@ -22,7 +22,7 @@ assert.equal(new Set(PERSONALITIES.map((p) => p[3])).size, 4, 'each personality 
 assert.equal(new Set(PERSONALITIES.map((p) => p[4])).size, 4, 'and its own Gemini voice');
 assert.equal(new Set(PERSONALITIES.map((p) => p[6])).size, 4, 'and its own Kokoro voice');
 for (const p of PERSONALITIES) assert.match(p[6], /^[ab][fm]_[a-z]+$/, `${p[0]} has a Kokoro voice`);
-assert.ok(!/config\.fishVoice/.test(side), 'a saved fishVoice (the old JARVIS default) is never used');
+assert.ok(!/config\.fishVoice\b/.test(side), 'a saved fishVoice (the old JARVIS default) is never used');
 // Both prompts take the personality's tone; it greets you in its voice only when it changes, voice on, not over a reply.
 assert.match(side, /Personality: \$\{styleNow\(\)\}/);
 assert.match(side, /style: styleNow\(\),/);

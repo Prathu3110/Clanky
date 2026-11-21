@@ -757,6 +757,24 @@
     return g;
   }
   // Kokoro on this computer: whether it's ready (or exactly why not), its engine, the voice, and Check again.
+  // Fish: the personality's own voice, one of the account's voices, or any voice by its fish.audio link.
+  function fishVoiceRows() {
+    if (!ui.fishAsked) { ui.fishAsked = true; act('fishvoices_load'); }
+    const cur = state.fishVoice, own = state.fishOwn ?? [];
+    const opts = [['default', `${personaLabel()}'s own voice`], ...own.map((v) => [v.id, v.name])];
+    if (cur && !own.some((v) => v.id === cur.id)) opts.push([cur.id, cur.name]);
+    const input = el('input', { type: 'text', id: 'fish-voice-link', placeholder: 'Paste a fish.audio voice link', 'aria-label': 'Fish voice link or id', autocomplete: 'off', spellcheck: false, maxLength: 300,
+      on: { keydown: (e) => { if (e.key === 'Enter' && input.value.trim()) act(`fishvoice:${input.value.trim()}`); } } });
+    return [
+      el('p', { className: 'sub', textContent: `Voice for ${personaLabel()} (each personality keeps its own)` }),
+      el('span', { className: 'px field select' },
+        el('select', { 'aria-label': 'Fish voice', 'data-k': 'fishvoice', on: { change: (e) => act(`fishvoice:${e.target.value}`) } },
+          opts.map(([id, name]) => el('option', { value: id, textContent: name, selected: id === (cur?.id ?? 'default') })))),
+      el('span', { className: 'px field' }, input),
+      el('p', { className: 'why wrap', textContent: 'Liked voices aren\'t shared by Fish: open one on fish.audio, copy its link, paste it here and press Enter.' }),
+    ];
+  }
+
   function studioRows() {
     const vs = state.studio ?? { checking: true };
     const status = vs.checking ? 'Checking Kokoro…' : vs.ok ? `Ready${vs.engine ? ` · ${vs.engine}` : ''}` : vs.message || "Kokoro isn't available.";
@@ -813,6 +831,7 @@
           el('p', { className: 'sub', textContent: 'How much it speaks' }),
           picks('How much it speaks', [['short', 'Short'], ['medium', 'Medium'], ['full', 'Everything']], state.voice?.studioSpeak ?? 'short', (x) => act(`studiospeak_${x}`), 'studiospeak'),
           el('p', { className: 'why wrap', textContent: 'The full answer always shows as text.' })) : null,
+        tts === 'fish' && hasKey ? el('div', { className: 'reveal', 'data-anim': 'fish-voice' }, ...fishVoiceRows()) : null,
         tts === 'gemini' && hasKey && state.geminiVoices?.length ? el('div', { className: 'reveal', 'data-anim': 'gemini-voice' },
           el('p', { className: 'sub', textContent: `Voice for ${personaLabel()} (each personality keeps its own)` }),
           el('span', { className: 'px field select' },

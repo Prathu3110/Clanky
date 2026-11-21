@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { encode, decode } from '../msgpack.mjs';
-import { FishVoice, fishAccount, startRequest, FISH_LIVE } from '../fish.mjs';
+import { FishVoice, fishAccount, fishOwnVoices, fishVoiceId, fishVoiceInfo, startRequest, FISH_LIVE } from '../fish.mjs';
 
 // MessagePack round trips, including the shapes Fish sends and expects.
 for (const v of [null, true, false, 0, 1, 127, 128, 255, 256, 65535, 65536, 2 ** 32 - 1, -1, -32, -33, -129, -40000, 0.5, -2.25, '', 'hi', 'é✓', 'x'.repeat(40), 'y'.repeat(300), 'z'.repeat(70000),
@@ -127,4 +127,20 @@ console.log('fish voice tests: passed');
   assert.equal(got.ended, 1);
   assert.equal(v.rebind({ onAudio() {} }), false);
   console.log('fish rebind tests: passed');
+}
+
+{
+  // Picking a voice by its link or id.
+  const id = '2680da81de8348a68e1f4dbaa79272f1';
+  assert.equal(fishVoiceId(id), id);
+  assert.equal(fishVoiceId(`https://fish.audio/m/${id}/`), id, 'a link');
+  assert.equal(fishVoiceId(`https://fish.audio/app/m/${id.toUpperCase()}?x=1`), id, 'upper case, query');
+  assert.equal(fishVoiceId('not a voice'), null);
+  assert.equal(fishVoiceId(`${id}0`), null, 'too long');
+  const reply = (status, body) => async () => ({ ok: status === 200, status, json: async () => body });
+  assert.deepEqual(await fishVoiceInfo('k', id, { fetchImpl: reply(200, { _id: id, title: 'Gregory' }) }), { id, name: 'Gregory' });
+  assert.equal(await fishVoiceInfo('k', id, { fetchImpl: reply(404, {}) }), null, 'unknown voice');
+  assert.equal(await fishVoiceInfo('k', id, { fetchImpl: async () => { throw new Error('offline'); } }), null, 'never throws');
+  assert.deepEqual(await fishOwnVoices('k', { fetchImpl: reply(200, { items: [{ _id: 'a', title: 'Mine' }, {}] }) }), [{ id: 'a', name: 'Mine' }]);
+  console.log('fish voice picking: passed');
 }
